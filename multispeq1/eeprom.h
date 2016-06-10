@@ -5,7 +5,7 @@
 
 // DANGER:  do not do too many writes to eeprom variables - cycles are limited
 // WARNING: max size is 2K
-// WARNING: Write only with the save() function.  If not, program may freeze.
+// WARNING: Write only with the store() function.  If not, program may freeze.
 
 // Jon Zeeff 2016
 
@@ -60,7 +60,7 @@ class eeprom_class
      volatile float colorcal_blank1[NUM_LEDS+1];         // blank used to calculate absorbance for LEDs 1,2,3,4,6,8,9,10 .  Blank here is actual blank.
      volatile float colorcal_blank2[NUM_LEDS+1];         // same as colorcal_blank1, but this blank is a single piece of white paper (for thicker samples)
      volatile float colorcal_blank3[NUM_LEDS+1];         // same as colorcal_blank1, but this blank is 3 pieces of white paper stacked (for even thicker samples)
-
+                    
      volatile float colorcal_intensity1_slope[NUM_LEDS+1]; // slope from calibration to Minolta SPAD at intensity 1 (use colorcal_blank1 as blank)
      volatile float colorcal_intensity1_yint[NUM_LEDS+1]; // y intercept from calibration to Minolta SPAD at intensity 1 (use colorcal_blank1 as blank)
      volatile float colorcal_intensity2_slope[NUM_LEDS+1]; // slope from calibration to Minolta SPAD at intensity 2 (use colorcal_blank1 as blank)

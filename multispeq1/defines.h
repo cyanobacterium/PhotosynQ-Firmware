@@ -13,7 +13,7 @@ const int PULSERDEBUG=0;   // uncomment to debug the pulser and detector
 #define CORAL_SPEQ 0
 
 // FIRMWARE VERSION OF THIS FILE (SAVED TO EEPROM ON FIRMWARE FLASH)
-#define DEVICE_FIRMWARE "0.54"
+#define DEVICE_FIRMWARE "1.05"
 #define DEVICE_NAME "MultispeQ"
 #define DEVICE_VERSION "1"
      
@@ -99,6 +99,10 @@ const uint8_t LED_to_pin[NUM_LEDS + 1] = {0, PULSE1, PULSE2, PULSE3, PULSE4, PUL
 #define POWERDOWN_REQUEST 28   // request that BLE module turn off MCU power
 #define BATT_ME  33           // to activate battery voltage sampling
 #define BATT_TEST 34
+#define REF_VOLTAGE 1.2
+#define BAT_MIN_LOADED 3.3    // in volts
+#define BAT_MIN 3.5
+#define BAT_MAX 4.2
 
 /*NOTES*/// blank pin (used when no other pin is selected - probably should change this later
 #define BLANK    32   // error - same as IOEXT2
@@ -147,7 +151,7 @@ EXTERN float thickness_raw_averaged;
 EXTERN float contactless_temp;
 EXTERN float contactless_temp_averaged;
 
-EXTERN int compass;
+EXTERN float compass;
 EXTERN float compass_averaged;
 EXTERN int x_compass_raw, y_compass_raw, z_compass_raw;
 EXTERN float x_compass_raw_averaged, y_compass_raw_averaged, z_compass_raw_averaged;
@@ -155,7 +159,7 @@ EXTERN float x_compass_raw_averaged, y_compass_raw_averaged, z_compass_raw_avera
 EXTERN double angle;
 EXTERN double angle_averaged;
 EXTERN String angle_direction;
-EXTERN int roll, pitch;
+EXTERN float roll, pitch;
 EXTERN float roll_averaged, pitch_averaged;
 EXTERN int x_tilt, y_tilt, z_tilt;
 EXTERN float x_tilt_averaged, y_tilt_averaged, z_tilt_averaged;
@@ -165,6 +169,12 @@ EXTERN float temperature_averaged, humidity_averaged, pressure_averaged;
 
 EXTERN float temperature2, humidity2, pressure2;
 EXTERN float temperature2_averaged, humidity2_averaged, pressure2_averaged;
+
+EXTERN float detector_read1, detector_read2;
+EXTERN float detector_read1_averaged, detector_read2_averaged;
+
+EXTERN float analog_read, digital_read;
+EXTERN float analog_read_averaged, digital_read_averaged;
 
 // pressure/temp/humidity sensors
 EXTERN BME280 bme1;        // I2C sensor

@@ -22,7 +22,9 @@ static void flush_BLE();
 static int Serial_Port = 3;   // which port to print to: 1 == Serial, 2 == Serial1, 3 = both  (ignored during automatic mode)
 static int automatic = 0;     // automatic means that writes will only go to the serial port that last had a byte read (Serial_Port is ignored)
 static int last_read = 0;     // where last incoming byte was from, 0 = Serial, 1 = Serial1
+static int retry_counter  = 0;  // total number of retries
 int packet_mode = 1;          // wait for ACK every n characters, resend if needed
+int cut_through = 0;          // send bytes as soon as we receive them (vs when packet buffer is full)
 
 // set baud rates
 
@@ -44,7 +46,6 @@ void Serial_Flush_Input(void)
 // TODO send a SYN/keepalive, but only if 10 seconds have passed
 void Serial_SYN(void)
 {
-
 
 }
 
@@ -84,13 +85,13 @@ void Serial_Printf(const char * format, ... )
 int Serial_Read()
 {
   for (;;) {
-    if (Serial && Serial.available())  {
-      last_read = 0;
-      return Serial.read();
-    }
     if (Serial1.available()) {
       last_read = 1;
       return Serial1.read();
+    }
+    if (Serial && Serial.available())  {
+      last_read = 0;
+      return Serial.read();
     }
   } // for
 }  // Serial_Read()
@@ -111,12 +112,11 @@ unsigned Serial_Available()
 
 int Serial_Peek()
 {
-  if (Serial && Serial.available())
-    return Serial.peek();
-
   if (Serial1.available())
     return Serial1.peek();
 
+  if (Serial && Serial.available())
+    return Serial.peek();
 
   return -1;
 }  // Serial_Available()
@@ -172,18 +172,18 @@ uint16_t crc16(const char* data_p, unsigned char length) {
 } // crc16()
 
 // output to the BLE serial port, but buffer it up into packets with a retry protocol
+// TODO - make this double buffered to avoid delays
 
-#define PACKET_SIZE 249
+#define PACKET_SIZE 234          // Note: must end up with a packet size that is a multiple of 20 (not counting null)
 #define ETX 04
-#define SEQ_NUMBER               // also send a sequence number in the packet?
 //#define ETX 'X'
 #define ACK 06
 //#define ACK 'Z'
 
-static char packet_buffer[PACKET_SIZE + 4 + 1 + 1 + 1];  // extra room for CRC then SEQ then ETX then null - multiple of 20 + 1
+static char packet_buffer[PACKET_SIZE + 1 + 4 + 1 + 1];  // extra room for SEQ then CRC then ETX then null - (multiple of 20) + 1
 static int packet_count = 0;                         // how many bytes currently in the above buffer
 static int seq = 0;                                  // goes A-Z and then wraps back to A - sent with each packet
-const int RETRIES = 4;
+const int RETRIES = 5;
 const int RETRY_DELAY = 1000;     // ms
 
 // push a full or partial packet out
@@ -194,12 +194,11 @@ static void flush_packet()
   if (packet_count == 0)     // we have nothing buffered, don't send an empty packet
     return;
 
+  int payload_count = packet_count;
+
+  packet_buffer[packet_count++] = seq + 'A';   // ascii A-Z for sequence number
+
   // calc and add ascii CRC (exactly 4 chars)
-#ifdef SEQ_NUMBER
-  packet_buffer[packet_count++] = seq + 'A';   // ascii A-Z
-#endif
-
-
   uint16_t crc = crc16(packet_buffer, packet_count);
   const char nybble_chars[] = "0123456789ABCDEF";
   packet_buffer[packet_count++] = nybble_chars[(crc >> 12) & 0xf];
@@ -216,10 +215,14 @@ static void flush_packet()
   // keep sending it until we get an ACK or we give up
   for (int i = 0; i < RETRIES; ++i) {
 
-    while (Serial1.available())           // flush input
+    while (Serial1.available())          // flush input
       Serial1.read();
 
-    Serial_Print_BLE(packet_buffer);     // send data
+    if (cut_through && i == 0)          // first try, only send the SEQ/CRC/ETX - payload already went out
+      Serial_Print_BLE(packet_buffer + payload_count);
+    else
+      Serial_Print_BLE(packet_buffer);  // send entire packet
+
     flush_BLE();                         // force it out
 
     // look for ACK, NAK or timeout
@@ -231,12 +234,14 @@ static void flush_packet()
         do {                                // got some character (probably ACK or NAK)
           c = Serial1.read();
         } while (Serial1.peek() != -1);     // remove any excess characters
-        break;          
+        break;
       }
     } // while
 
     if (c == ACK)
       break;                                // note: any other character will cause a retry
+
+    ++retry_counter;                        // for diagnostics
 
   } // for
 
@@ -253,8 +258,19 @@ static void print_packet(const char *str)
   // copy to buffer, sending whenever it reaches n bytes
   while (*str != 0) {                  // until end of string
 
+    if (*str == ETX) {                   // we cannot send this character, skip it
+       ++str;
+       continue;
+    }
+
     packet_buffer[packet_count] = *str;
     ++packet_count;
+
+    if (cut_through) {
+      char s[2] = {*str, 0};
+      Serial_Print_BLE(s);  // send to BLE buffer now vs waiting for a full data packet
+    }
+
     ++str;
 
     if (packet_count == PACKET_SIZE) {  // full buffer - send it
@@ -438,18 +454,22 @@ char *Serial_Input_Chars(char *string, const char *terminators, long unsigned in
 
   // loop forever or until a condition is met
   for (;;) {
-    int c = Serial_Peek();
+    unsigned now = millis();
 
-    if (timeout > 0 && (millis() - start) > timeout)  // timeout
+    if (timeout > 0 && (now - start) > timeout)       // timeout
       break;                                          // done
 
-    if (c == -1) continue;                            // nothing available
+    int c = Serial_Peek();
+    if (c == -1) {
+      sleep_cpu();                         // save power
+      continue;                            // nothing available
+    }
 
     char b = Serial_Read();
     if (strchr(terminators, b))                       // terminator char seen - throw it away
       break;
 
-    start = millis();                                 // restart interval
+    start = now;                                      // restart interval
 
     string[count++] = b;                              // add to string
 

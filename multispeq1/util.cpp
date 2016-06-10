@@ -27,14 +27,15 @@ void applyMagCal(float * arr) {
 
   //arr[1] *= -1;
   arr[0] *= -1;
-}
-
-void applyAccCal(int * arr){
-  arr[1] *= -1;
   arr[2] *= -1;
 }
 
-void rad_to_deg(float* roll, float* pitch, float* compass){
+void applyAccCal(int * arr) {
+  //arr[1] *= -1;
+  arr[2] *= -1;
+}
+
+void rad_to_deg(float* roll, float* pitch, float* compass) {
   *roll *= 180 / PI;
   *pitch *= 180 / PI;
   *compass *= 180 / PI;
@@ -44,16 +45,18 @@ void rad_to_deg(float* roll, float* pitch, float* compass){
 float getCompass(const float magX, const float magY, const float magZ, const float & pitch, const float & roll) {
 
   float negBfy = magZ * sine_internal(roll) - magY * cosine_internal(roll);
-  float Bfx = magX * cosine_internal(pitch) - magY * sine_internal(roll) * sine_internal(pitch) - magZ * sine_internal(pitch) * cosine_internal(roll);
+  float Bfx = magX * cosine_internal(pitch) + magY * sine_internal(roll) * sine_internal(pitch) + magZ * sine_internal(pitch) * cosine_internal(roll);
   float compass = atan2(negBfy, Bfx);
+
+  compass += PI / 2;
+
   if (compass < 0) {
     compass += 2 * PI;
   }
-
-  compass += PI / 2;
-  if(compass > 2 * PI){
+  if (compass > 2 * PI) {
     compass -= 2 * PI;
   }
+
 
   return compass;
 }
@@ -78,15 +81,15 @@ int compass_segment(float angle)    // in degrees, assume no negatives
 }
 
 //get the direction (N/S/E/W/NW/NE/SW/SE) from the compass heading
-String getDirection(int segment) {
+const char * getDirection(int segment) {
 
   if (segment > 7 || segment < 0) {
     return "\"Invalid compass segment\"";
   }
 
-  String names[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+  const char *names[] = {"\"N\"", "\"NE\"", "\"E\"", "\"SE\"", "\"S\"", "\"SW\"", "\"W\"", "\"NW\""};
 
-  return "\"" + names[segment] + "\"";
+  return names[segment];
 }
 
 //calculate tilt angle and tilt direction given roll, pitch, compass heading
@@ -109,7 +112,7 @@ Tilt calculateTilt(float roll, float pitch, float compass) {
     deviceTilt.angle_direction = "\"Invalid compass heading\"";
   }
 
-  float tilt_angle = atan2((sine_internal(roll)), cosine_internal(roll) * sine_internal(pitch));
+  float tilt_angle = atan2(-1 * sine_internal(roll), cosine_internal(roll) * sine_internal(pitch));
 
   tilt_angle *= 180 / PI;
 
@@ -188,3 +191,38 @@ float cosine_internal(float angle) {
   return (x < y) ? x : y;
   }
 */
+
+float measure_hall() {
+  float hall_value = (analogRead(HALL_OUT) + analogRead(HALL_OUT) + analogRead(HALL_OUT)) / 3;
+  //  Serial_Printf("final hall_value: %f",hall_value);
+  return hall_value;
+}
+
+void start_on_open_close() {
+  // take an initial measurement as a baseline (closed position)
+  for (uint16_t i = 0; i < 10; i++) {                            // throw away values to make sure the first value is correct
+    measure_hall();
+  }
+  float start_position = measure_hall();
+  float current_position = start_position;
+
+  // now measure every 200ms until you see the value change to > 10000 counts
+  while (current_position - start_position < 8000) {
+    current_position = measure_hall();
+    //        Serial_Printf("start: %f, current: %f\n", start_position, current_position);
+    delay(200);                                                               // measure every 100ms
+    if (current_position - start_position < -2000) {                              // if the person opened it first (ie they did it wrong and started it with clamp open) - detect and skip to end
+      //        Serial_Print("made it");
+      goto end;
+    }
+  }
+  // now measure again every 200ms until you see the value change to < 5000 counts
+  while (current_position  - start_position > 6000) {
+    current_position = measure_hall();
+    //        Serial_Printf("start: %f, current: %f\n", start_position, current_position);
+    delay(200);                                                               // measure every 200ms
+  }
+end:
+  delay(500);                                                               // make sure the clamp has time to settle onto the leaf.
+}
+

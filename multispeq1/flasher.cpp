@@ -81,6 +81,13 @@ void loop ()
 // hint:  on Linux, exit the serial console and do "dd if=blink.hex of=/dev/ttyACM0", then restart the Serial console and
 // enter the ":flash xxx" command.
 
+// caution:  on a serial port, it is easy to send too fast.  Put delays between lines.
+
+// TODO - instead of splitting flash in half, use whatever flash is remaining.  This would allow a 64K program to flash
+// a 192K program.  This would allow the two step process of 192K, downgrade to 64K, upgrade to new 192K.
+
+// TODO - only copy RAMFUNC functions to ram just before they are used
+
 void upgrade_firmware(void)   // main entry point
 {
   Serial_Printf("%s flash size = %dK in %dK sectors\n", FLASH_ID, FLASH_SIZE / 1024, FLASH_SECTOR_SIZE / 1024);
@@ -164,7 +171,7 @@ static int check_compatible(uint32_t min, uint32_t max)
 // WARNING:  you can destroy your MCU with flash erase or write!
 // This code may or may not protect you from that.
 
-// Modifications by Jon Zeeff
+// Extensive modifications for OTA updates by Jon Zeeff
 // Original by Niels A. Moseley, 2015.
 // This code is released into the public domain.
 
@@ -489,6 +496,10 @@ flash_block (uint32_t address, uint32_t * bytes, int count)
 }				// flash_block()
 
 
+// these two are optional
+
+#if 1
+
 // read a WORD from the write once flash area
 // address is 0 to 0xF
 
@@ -530,6 +541,8 @@ RAMFUNC void program_once(unsigned char address, uint32_t word_value)
   FMC_PFB0CR |= 0xF << 20;  // flush cache
   __enable_irq ();
 }
+
+#endif
 
 // **********************************************************
 

@@ -42,24 +42,41 @@ void PAR_init()
 
 }  // PAR_init()
 
-uint16_t par_to_dac (float _par, uint16_t _pin) {                                             // convert dac value to par, in form y = mx + b where y is the dac value
-  int dac_value = _par * (eeprom->par_to_dac_slope1[_pin] * eeprom->par_to_dac_slope1[_pin]) + _par * eeprom->par_to_dac_slope2[_pin] + eeprom->par_to_dac_yint[_pin];
+uint16_t par_to_dac (float _par, uint16_t _pin) {                                             // convert dac value to par, in form y = mx2+ rx + b where y is the dac value  
+  int dac_value = _par * _par * eeprom->par_to_dac_slope1[_pin] + _par * eeprom->par_to_dac_slope2[_pin] + eeprom->par_to_dac_yint[_pin];
+//  int dac_value = _par * eeprom->par_to_dac_slope1[_pin] * eeprom->par_to_dac_slope1[_pin] + _par * eeprom->par_to_dac_slope2[_pin] + eeprom->par_to_dac_yint[_pin];
+//  Serial_Print("I am here:  ");
   
   if (_par == 0) {                                                                           // regardless of the calibration, force a PAR of zero to lights off
     dac_value = 0;
-  }
- 
+  } 
   dac_value = constrain(dac_value,0,4095);
-
   return dac_value;
 }
 
 float light_intensity_raw_to_par (float _light_intensity_raw, float _r, float _g, float _b) {
   int par_value = eeprom->light_slope_all * _light_intensity_raw + _r * eeprom->light_slope_r + _g * eeprom->light_slope_g + _b * eeprom->light_slope_b + eeprom->light_yint;
+  if (par_value < 0) {                                                                              // there may be cases when the output could be less than zero.  In those cases, set to zero and mark a flag 
+    par_value == 0; 
+  } 
+/*
+  Serial_Print_Line("light_intenisty_raw_to_par");
+  Serial_Print_Line(par_value);
+  Serial_Print_Line(_light_intensity_raw);
+  Serial_Print_Line(_r);
+  Serial_Print_Line(_g);
+  Serial_Print_Line(_b);
+  Serial_Print_Line("saved values");
+  Serial_Print_Line(eeprom->light_slope_all,6);
+  Serial_Print_Line(eeprom->light_slope_r,6);
+  Serial_Print_Line(eeprom->light_slope_g,6);
+  Serial_Print_Line(eeprom->light_slope_b,6);
+  Serial_Print_Line(eeprom->light_yint,6);
+  */
   return par_value;
 }
 
-int get_light_intensity(int notRaw, int _averages) {
+int get_light_intensity(int _averages) {
 
   r = par_sensor->readRData();
   g = par_sensor->readGData();
@@ -70,16 +87,17 @@ int get_light_intensity(int notRaw, int _averages) {
   r_averaged += r / _averages;
   g_averaged += g / _averages;
   b_averaged += b / _averages;
+/*
+  Serial_Print_Line("get_light_intensity");
+  Serial_Print_Line(light_intensity_raw,6);
+  Serial_Print_Line(light_intensity,6);
+  Serial_Print_Line(r_averaged,6);
+  Serial_Print_Line(g_averaged,6);
+  Serial_Print_Line(b_averaged,6);
+*/
 
-  if (notRaw == 0) {
-    light_intensity_raw_averaged += light_intensity_raw / _averages;
-    return light_intensity_raw;
-  }
-  else if (notRaw == 1) {
-    light_intensity_averaged += light_intensity / _averages;
-  }
-
+  light_intensity_raw_averaged += light_intensity_raw / _averages;
+  light_intensity_averaged += light_intensity / _averages;
   return light_intensity;
-  
 } // get_light_intensity()
 

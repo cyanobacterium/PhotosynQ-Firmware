@@ -1,5 +1,3 @@
-
-//  Routines to set multispeq DAC values.
 //  This is used to set LED intensity
 //  Do not write to the DACs or ldac lines anywhere else.
 //  Any calls from outside this file assume that pins are numbered 1-x (vs 0-x).
@@ -19,6 +17,9 @@ static const short LED_to_dac[NUM_LEDS] = {0, 0, 0, 2, 0, 1, 2, 1, 1, 1};  // mu
 // map pin number (eg, 0-9) to which DAC channel that pin is on
 static const short LED_to_channel[NUM_LEDS] = {2, 3, 0, 0, 1, 1, 1, 3, 2, 0};   // must be 0,1,2,3
 
+static unsigned short prev_value[NUM_LEDS];  // store prev value so we waste time
+
+
 // initialize the DACs
 
 int DAC_init(void)
@@ -34,10 +35,10 @@ int DAC_init(void)
   // initialize DACs
   for (int i = 0; i < NUM_DACS; ++i) {
     if (dac[i] == 0)
-       dac[i] = new mcp4728(i + 1);            // create it - avoid using address 0 (the default chip address)
+      dac[i] = new mcp4728(i + 1);            // create it - avoid using address 0 (the default chip address)
     dac[i]->setVref(1, 1, 1, 1);
     dac[i]->setGain(0, 0, 0, 0);
-    for (int j = 0; j < 4; ++j)             // set all initial values to zero
+    for (int j = 0; j < 4; ++j)               // set all initial values to zero
       dac[i]->analogWrite(j, 0);
   } // for
 
@@ -71,11 +72,12 @@ void DAC_set(unsigned int led, unsigned int value)
   //    Serial.print(",");
   //    Serial.println(dac_channel);
 
-  // set value on DAC
-  dac[dac_number]->analogWrite(dac_channel, value);
+  if ((unsigned short) value != prev_value[led])                           // save time if already set
+    dac[dac_number]->analogWrite(dac_channel, value);    // set value on DAC
+
+  prev_value[led] = (unsigned short) value;
 
 }  // DAC_set()
-
 
 // Cause DAC changes to take effect
 // This allows many changes to happen at the same time

@@ -16,6 +16,37 @@ void program_once(unsigned char address, unsigned int value);
 
 int jz_test_mode = 0;
 
+
+void start_watchdog(int minutes)
+{
+  if (minutes < 1)
+    minutes = 1;
+  WDOG_UNLOCK = WDOG_UNLOCK_SEQ1;
+  WDOG_UNLOCK = WDOG_UNLOCK_SEQ2;
+  delayMicroseconds(1); // Need to wait a bit..
+  WDOG_TOVALL = 0; // The next 2 lines sets the time-out value. This is the value that the watchdog timer compare itself to.
+  WDOG_TOVALH = minutes;     // approximate
+  WDOG_PRESC = 0;
+  WDOG_STCTRLH = (WDOG_STCTRLH_WAITEN | WDOG_STCTRLH_STOPEN | WDOG_STCTRLH_WDOGEN | WDOG_STCTRLH_ALLOWUPDATE); // enable
+}
+
+void stop_watchdog()
+{
+  WDOG_UNLOCK = WDOG_UNLOCK_SEQ1;
+  WDOG_UNLOCK = WDOG_UNLOCK_SEQ2;
+  delayMicroseconds(1); // Need to wait a bit..
+  WDOG_STCTRLH = WDOG_STCTRLH_ALLOWUPDATE;               // disable
+}
+
+void feed_watchdog()
+{
+  noInterrupts();
+  WDOG_REFRESH = 0xA602;
+  WDOG_REFRESH = 0xB480;
+  interrupts()
+}
+
+
 // qsort uint16_t comparison function (tri-state) - needed for median16()
 
 static int uint16_cmp(const void *a, const void *b)
@@ -121,46 +152,69 @@ int check_protocol(char *str)
 
 
 
-// Battery check: Calculate battery output based on flashing the 4 IR LEDs at 250 mA each for 10uS.
+// Battery check:
+// 0 - just read voltage (quick)
+// 1 - level while flashing the 4 IR LEDs at 250 mA each for awhile
 // This should run just before any new protocol - if it’s too low, report to the user
 // return 1 if low, otherwise 0
-// for flash == 0, make no assumptions about pins being initialized
 
-const float MIN_BAT_LEVEL (3.4 * (16. / (16 + 47)) * (65536 / 1.2)); // 3.4V min battery voltage, voltage divider, 1.2V reference, 16 bit ADC
-
-int battery_low(int flash)         // 0 for no load, 1 to flash LEDs to create load
+int battery_low(int load)         // 0 for no load, 1 to flash LEDs to create load
 {
+  int value = battery_level(load);
+
+  if (load) {
+    if (value < BAT_MIN_LOADED)
+      return 1;   // too low
+  } else {
+    if (value < BAT_MIN)
+      return 1;   // too low
+  } // if
+
   return 0;
+
+} // battery_low()
+
+#define R1 680                // resistor divider for power measurement
+#define R2 2000
+
+int battery_level(int load)
+{
+  uint32_t initial_value = 0;
 
   // enable bat measurement
   pinMode(BATT_ME, OUTPUT);
   digitalWriteFast(BATT_ME, LOW);
-  delay(20);
 
+  delayMicroseconds(300);    // has a slow filter circuit
+  
   // find voltage before high load
-  uint32_t initial_value = 0;
-  uint32_t value;
-
   for (int i = 0 ; i < 100; ++i)
     initial_value += analogRead(BATT_TEST);  // test A10 analog input
   initial_value /= 100;
 
-  value = initial_value;
+  //Serial_Printf("initial AD = %d\n",initial_value);
 
-  if (flash) {   // flash LEDs if needed to create load
+  uint32_t value = initial_value;
+
+  // TODO verify that load effects voltage
+  
+  if (load) {   // flash LEDs if needed to create load
+
     // set DAC values to 1/4 of full output to create load
-    DAC_set(1, 4096 / 4);
-    DAC_set(2, 4096 / 4);
-    DAC_set(5, 4906 / 4);
-    DAC_set(6, 4906 / 4);
+    DAC_set(5, 4096 / 4);
+    DAC_set(6, 4096 / 4);
+    DAC_set(8, 4906 / 4);
+    DAC_set(9, 4906 / 4);
+    DAC_set(10, 4906 / 4);
     DAC_change();
     delay(1);       // stabilize
 
     // turn on 4 LEDs
-    digitalWriteFast(PULSE1, 1);
-    digitalWriteFast(PULSE2, 1);
     digitalWriteFast(PULSE5, 1);
     digitalWriteFast(PULSE6, 1);
+    digitalWriteFast(PULSE8, 1);
+    digitalWriteFast(PULSE9, 1);
+    digitalWriteFast(PULSE10, 1);
 
     delay(20);          // there a slow filter on the circuit
 
@@ -171,29 +225,50 @@ int battery_low(int flash)         // 0 for no load, 1 to flash LEDs to create l
     value /= 100;
 
     // turn off 4 LEDs
-    digitalWriteFast(PULSE1, 0);
-    digitalWriteFast(PULSE2, 0);
     digitalWriteFast(PULSE5, 0);
     digitalWriteFast(PULSE6, 0);
+    digitalWriteFast(PULSE8, 0);
+    digitalWriteFast(PULSE9, 0);
+    digitalWriteFast(PULSE10, 0);
 
-    // turn off BATT_ME (let float)
-    pinMode(BATT_ME, INPUT);
+    //Serial_Printf("loaded bat = %d counts %fV\n", value, value * (REF_VOLTAGE / 65536));
+  }  // if
 
-    //Serial_Printf("bat = %d counts %fV\n", value, value * (1.2 / 65536));
+  // set Bat_meas pin to high impedance
+  pinMode(BATT_ME, INPUT); 
 
-    // TODO - make use of intial value?
-  } // if
+  int milli_volts = 1000 * ((value / 65536.) * REF_VOLTAGE) / ((float)R1 / (R1 + R2));
 
-  if (value  < MIN_BAT_LEVEL)
-    return 1;                  // too low
+  return milli_volts;
+}
+
+// find percentage of battery remaining
+
+int battery_percent(int load)
+{
+  int v = battery_level(load);   // get mv, test without load
+
+  // Serial_Printf("level = %d, load = %d\n",v,load);
+
+  float min_level;
+  
+  if (load)
+     min_level = BAT_MIN_LOADED * 1000;     // consider this min charge level on a lithium battery when loaded
   else
-    return 0;  // OK
+     min_level = BAT_MIN * 1000;            // consider this min charge level on a lithium battery when loaded
+      
+  const float max_level = BAT_MAX * 1000;   // consider this fully charged
 
-} // battery_low()
+  v = round(((v - min_level) / (max_level - min_level)) * 100);     // express as %
+  v = constrain(v,0,100);
 
+  // Serial_Printf("v = %d\n",v);
+
+  return v;
+}
 
 // return 1 if the accelerometer values haved changed
-#define ACCEL_CHANGE 100
+#define ACCEL_CHANGE 60
 void MMA8653FC_read(int *axeXnow, int *axeYnow, int *axeZnow);
 
 int accel_changed()
@@ -214,7 +289,7 @@ int accel_changed()
   return changed;
 }  // accel_changed()
 
-const unsigned long SHUTDOWN = 30000;   // power down after X ms of inactivity
+const unsigned long SHUTDOWN = 240 * 1000;   // power down after X ms of inactivity
 static unsigned long last_activity = millis();
 
 // record that we have seen serial port activity (used with powerdown())
@@ -226,36 +301,33 @@ void activity() {
 
 void powerdown() {
 
-  return;    // this is still experimental
-  
   if ((millis() - last_activity > SHUTDOWN /* && !Serial */) || battery_low(0)) {   // if USB is active, no timeout sleep
 
-#ifdef LEGACY
-    pinMode(POWERDOWN_REQUEST, OUTPUT);               // legacy: ask BLE to power down MCU (active low)
-    digitalWriteFast(POWERDOWN_REQUEST, LOW);
-#endif
+    // TODO - turn off unneeded peripherals or some pins to high impedance/floating?
+    // TODO put accelerometer into lowest power mode
+    // TODO - have accelerometer create interrupt to wake up
 
-    // turn off BLE, turn off analog circuitry (should already be off), then enter a sleep loop
-    // TODO
-
-    // wake up if the device has changed orientation
     accel_changed();     // update values with current
 
-    for (;;) {
-      sleep_mode(2000);
+    // wake up if the device has changed orientation
+    // remain in sleep if battery is low
 
-      if (accel_changed()) {    // note: accelerometer doesn't seem to need any initialization after being turned off then on
-        if (battery_low(0)) {
-          sleep_mode(60000);    // longer sleep for low bat
-          continue;
-        } else
-          break;
-      } // if
+    for (;;) {
+      while (battery_low(0)) 
+        sleep_mode(60000);    // sleep much longer for low bat
+
+      // note: Accel runs down to 2V - ie, battery is fine
+      if (accel_changed() && !battery_low(0))     //       Accel requires ~2ms from power on.  So leave it powered.
+        break;
+      else
+        sleep_mode(200);          // sleep for 200 ms (can be much longer if accel interrupts on movement)
+
     } // for
 
     // note, peripherals are now in an unknown state
+    // calling setup() + turn on peripherals might also work and would preserve ram contents (allowing hibernate in more places)
 
-    // reboot to turn BLE on and re-intialize peripherals
+    // reboot to turn everything on and re-intialize peripherals
 #define CPU_RESTART_ADDR ((uint32_t *)0xE000ED0C)
 #define CPU_RESTART_VAL 0x5FA0004
     *CPU_RESTART_ADDR = CPU_RESTART_VAL;
@@ -264,7 +336,7 @@ void powerdown() {
 }  // powerdown()
 
 
-#define USE_HIBERNATE  // doesn't work, you have to edit the library source code
+//#define USE_HIBERNATE  // doesn't work, you have to edit the library source code
 #include <Snooze.h>
 
 static SnoozeBlock config;
@@ -275,8 +347,11 @@ void sleep_mode(const int n)
   // Set Low Power Timer wake up in milliseconds.
   config.setTimer(n);      // milliseconds
 
+#ifdef USE_HIBERNATE
+  Snooze.hibernate( config );
+#else
   Snooze.deepSleep( config );
-  //    Snooze.hibernate( config );
+#endif
 
 } // sleep_mode()
 
@@ -327,39 +402,69 @@ void scan_i2c(void)
 
 } // scan_i2c()
 
-//======================================
+#if 0
 
-// read/write device_id and manufacture_date to eeprom
+int conv2d(const char* p) {
+  int v = 0;
+  if ('0' <= *p && *p <= '9')
+    v = *p - '0';
+  return 10 * v + *++p - '0';
+}
 
-void get_set_device_info(const int _set) {
+#include <Time.h>
 
-  if (_set == 1) {
-    long val;
+// get the compiled time and use it to set the system time and the RTC
 
-    // please enter new device ID (lower 4 bytes of BLE MAC address as a long int) followed by '+'
-    Serial_Print_Line("{\"message\": \"Please enter device mac address (long int) followed by +: \"}\n");
-    val =  Serial_Input_Long("+", 0);              // save to eeprom
-    store(device_id, val);              // save to eeprom
+void timefromcompiler(void) {
+  const char *date = __DATE__;
+  const char *time = __TIME__;
 
-    // please enter new date of manufacture (yyyymm) followed by '+'
-    Serial_Print_Line("{\"message\": \"Please enter device manufacture date followed by + (example 052016): \"}\n");
-    val = Serial_Input_Long("+", 0);
-    store(device_manufacture, val);
+  int _days, _month = 1, _year, _hour, _minute, _second;
+  uint32_t _ticks;
 
-  } // if
+  //Day
+  _days = conv2d(date + 4);
 
-  // print
-  Serial_Printf("{\"device_name\":\"%s\",\"device_version\":\"%s\",\"device_id\":\"d4:f5:%x:%x:%x:%x\",\"device_firmware\":\"%s\",\"device_manufacture\":\"%d\"}", DEVICE_NAME, DEVICE_VERSION,
-                (unsigned)eeprom->device_id >> 24,
-                ((unsigned)eeprom->device_id & 0xff0000) >> 16,
-                ((unsigned)eeprom->device_id & 0xff00) >> 8,
-                (unsigned)eeprom->device_id & 0xff,
-                DEVICE_FIRMWARE, eeprom->device_manufacture);
-  Serial_Print_CRC();
+  //Month
+  switch (date[0]) {
+    case 'J':
+      if (date[1] == 'a')  // Jan
+        _month = 1;
+      else if (date[2] == 'n')  // June
+        _month = 6;
+      else
+        _month = 7;  // July
+      break;
+    case 'F': _month = 2; break;
+    case 'A': _month = date[2] == 'r' ? 4 : 8; break;
+    case 'M': _month = date[2] == 'r' ? 3 : 5; break;
+    case 'S': _month = 9; break;
+    case 'O': _month = 10; break;
+    case 'N': _month = 11; break;
+    case 'D': _month = 12; break;
+  }
 
-  return;
+  //Year
+  _year = conv2d(date + 9);
 
-} // get_set_device_info()
+  //Time
+  _hour = conv2d(time);
+  _minute = conv2d(time + 3);
+  _second = conv2d(time + 6);
 
-// ======================================
+  // This sets the system time (NOT the Teensy RTC Clock)
+  // set your seperated date/time variables out as normal and update system time FIRST
+  setTime(_hour, _minute, _second, _days, _month, _year);
+
+  // now we can use the system time to update the Teensy's RTC bits
+  // This sets the RTC Clock from system time - epoch style, just like it wants :)
+  Teensy3Clock.set(now());
+
+  Serial_Printf("Set RTC to: %d-%d-%dT%d:%d:%d.000Z\n", year(), month(), day(), hour(), minute(), second());
+}
+
+#endif
+
+
+
 
