@@ -373,6 +373,8 @@ static void reboot()
 
 void powerdown() {
 
+  return;
+
   if ((millis() - last_activity > SHUTDOWN && !Serial) || battery_low(0)) {   // if USB is active, no timeout sleep
 
     accel_changed();     // update values with current position

@@ -19,6 +19,7 @@ static void Serial_Print_BLE(const char *str);
 static void print_packet(const char *str);
 static void flush_BLE();
 
+
 static int Serial_Port = 3;   // which port to print to: 1 == Serial, 2 == Serial1, 3 = both  (ignored during automatic mode)
 static int automatic = 0;     // automatic means that writes will only go to the serial port that last had a byte read (Serial_Port is ignored)
 static int last_read = 0;     // where last incoming byte was from, 0 = Serial, 1 = Serial1
@@ -294,6 +295,8 @@ static void Serial_Print_BLE(const char *str)
 
     if (count == BLE_PACKET_SIZE) {   // full buffer - send it
       flush_BLE();
+    } else if(!packet_mode){
+      flush_BLE();  
     }
   } // while
 }

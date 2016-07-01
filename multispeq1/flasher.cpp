@@ -147,8 +147,8 @@ void upgrade_firmware(void)   // main entry point
   for (;;)  {
     int c;
 
-    while (!Serial.available()) {}
-    c = Serial.read();
+    while (!Serial_Available()) {}
+    c = Serial_Read();
 
     if (c == '\n' || c == '\r') {
       line[count] = 0;          // terminate string
