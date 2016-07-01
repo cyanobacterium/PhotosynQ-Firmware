@@ -56,9 +56,10 @@ uint16_t par_to_dac (float _par, uint16_t _pin) {                               
 
 float light_intensity_raw_to_par (float _light_intensity_raw, float _r, float _g, float _b) {
   int par_value = eeprom->light_slope_all * _light_intensity_raw + _r * eeprom->light_slope_r + _g * eeprom->light_slope_g + _b * eeprom->light_slope_b + eeprom->light_yint;
-  if (par_value < 0) {                                                                              // there may be cases when the output could be less than zero.  In those cases, set to zero and mark a flag 
-    par_value == 0; 
-  } 
+ 
+  if (par_value < 0)                                                                             // there may be cases when the output could be less than zero.  In those cases, set to zero and mark a flag 
+    par_value = 0; 
+
 /*
   Serial_Print_Line("light_intenisty_raw_to_par");
   Serial_Print_Line(par_value);

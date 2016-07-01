@@ -6,10 +6,17 @@
 
 /*
 
+prepare for bluetooth classic
+changed baud rate to 115200 from 57600
+changed packet_mode to 0
+added bluetooth_configure command to 1009+ or "bluetooth_configure"
+removed device_manufacture
+set #define BLE_DELAY  to 0 (no delay between packets)
+
   add watchdog - need to know max delays
-// update DAC and get lights working in [{}]
-// once lights work, comparison test old and new adc routines, with timing
-//
+  // update DAC and get lights working in [{}]
+  // once lights work, comparison test old and new adc routines, with timing
+  //
   change 0,1 to before/after for environmentals
   consider adding _raw option as "raw" option in json
 
@@ -189,69 +196,45 @@
 // includes
 #include "defines.h"
 #include <i2c_t3.h>
-#include <Time.h>                                                             // enable real time clock library
-#include "json/JsonParser.h"
-#include "utility/mcp4728.h"              // delete this once PAR is fixed
-#include "DAC.h"
-#include "utility/AD7689.h"               // external ADC
+#include <Time.h>                   // enable real time clock library
 #define EXTERN
 #include "eeprom.h"
-//#include <ADC.h>                  // internal ADC
 #include "serial.h"
-#include "utility/crc32.h"
-#include <SPI.h>    // include the new SPI library
+#include <SPI.h>                    // include the new SPI library
 #include "util.h"
 #include <TimeLib.h>
 
-// function definitions used in this file
-int MAG3110_init(void);           // initialize compass
-int MMA8653FC_init(void);         // initialize accelerometer
-void MLX90615_init(void);         // initialize contactless temperature sensor
-void PAR_init(void);               // initialize PAR and RGB sensor
+void setup_pins(void);            // initialize pins
 
 // This routine is called first
-// Note: assume that this routine may be called multiple times - watch for memory leaks
 
-void setup() {
-
-  // TODO
-  // turn on BLE module
-
-  // delay(700);             // doesn't work reliably
+void setup() 
+{
+  if (eeprom->sleep == 1) {     // sleep forever if requested
+     store(sleep,0);            // but don't sleep after next reboot
+     deep_sleep();
+  }
 
   // set up serial ports (Serial and Serial1)
-  Serial_Set(4);             // auto switch between USB and BLE
-  Serial_Begin(57600);
+  Serial_Set(4);                // auto switch between USB and BLE
+  Serial_Begin(115200);
 
   // Set up I2C bus - CAUTION: any subsequent calls to Wire.begin() will mess this up
-  Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_INT, I2C_RATE_400);  // using alternative wire library
+  Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_INT, I2C_RATE_800);  // using alternative wire library
 
   // initialize SPI bus
   SPI.begin ();
 
-  // initialize DACs
-  DAC_init();
+  eeprom_initialize();      // eeprom
+  assert(sizeof(eeprom_class) < 2048);      // check that we haven't exceeded eeprom space
 
   // set up MCU pins
+  setup_pins();
 
-  // set up LED on/off pins
-  for (unsigned i = 1; i < NUM_LEDS + 1; ++i)
-    pinMode(LED_to_pin[i], OUTPUT);
-
-  //pinMode(HALL_OUT, INPUT);                       // set hall effect sensor to input so it can be read
-  //pinMode(DEBUG_DC, INPUT_PULLUP);
-  //pinMode(DEBUG_DD, INPUT_PULLUP);
-
-  // pins used to turn on/off detector integration/discharge
-  pinMode(HOLDM, OUTPUT);
-  digitalWriteFast(HOLDM, HIGH);                  // discharge cap
-  pinMode(HOLDADD, OUTPUT);
-  digitalWriteFast(HOLDADD, HIGH);                // discharge cap
-
-  // enable bat measurement
-  pinMode(BATT_ME, OUTPUT);
-  digitalWriteFast(BATT_ME, LOW);
-
+  // turn on 3.3V power and initialize ICs
+  turn_on_3V3();
+  turn_on_5V();                  // LEAVE THIS HERE!  Lots of hard to troubleshoot problems emerge if this is removed.
+  
 #if CORALSPEQ == 1
   // Set pinmodes for the coralspeq
   //pinMode(SPEC_EOS, INPUT);
@@ -266,9 +249,6 @@ void setup() {
   //digitalWrite(SPEC_GAIN, LOW); //LOW Gain
 #endif
 
-  MAG3110_init();           // initialize compass
-  MMA8653FC_init();         // initialize accelerometer
-
   // ADC config
   analogReference(EXTERNAL);
   analogReadResolution(16);
@@ -280,21 +260,35 @@ void setup() {
   }
   analogReference(INTERNAL);   // 1.20V
 
-  // pressure/humidity/temp sensors
-  bme1.begin(0x77);
-  bme2.begin(0x76);
+  setTime(Teensy3Clock.get());              // set time from RTC
 
-  PAR_init();               // color sensor
-  eeprom_initialize();      // eeprom
-
-  assert(sizeof(eeprom_class) < 2048);                    // check that we haven't exceeded eeprom space
-
-  setTime(Teensy3Clock.get());             // set time from RTC
-
-  Serial_Print(DEVICE_NAME);               // note: this may not display because Serial isn't ready
+  Serial_Print(DEVICE_NAME);                // note: this may not display because Serial isn't ready
   Serial_Print_Line(" Ready");
 
 }  // setup() - now execute loop()
+
+
+void setup_pins()
+{
+  // set up LED on/off pins
+  for (unsigned i = 1; i < NUM_LEDS + 1; ++i)
+    pinMode(LED_to_pin[i], OUTPUT);
+
+  // pins used to turn on/off detector integration/discharge
+  pinMode(HOLDM, OUTPUT);
+  digitalWriteFast(HOLDM, HIGH);                  // discharge cap
+  pinMode(HOLDADD, OUTPUT);
+  digitalWriteFast(HOLDADD, HIGH);                // discharge cap
+}
+
+
+void unset_pins()     // save power, set pins to high impedance
+{
+  // turn off almost every pin
+  for (unsigned i = 0; i < 33; ++i)
+     if (i != 18 && i != 19 && i != WAKE_DC && i != WAKE_3V3)  // leave I2C and power control on
+        pinMode(i, INPUT);  
+}
 
 
 #if CORAL_SPEQ == 1

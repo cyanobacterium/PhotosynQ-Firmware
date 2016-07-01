@@ -198,8 +198,8 @@ float variable(const char *name)
   } else if (strcmp( name, "thickness_b" ) == 0 ) {
     value = eeprom->thickness_b;
 
-  } else if (strcmp( name, "thickness_d" ) == 0 ) {
-    value = eeprom->thickness_d;
+  } else if (strcmp( name, "thickness_c" ) == 0 ) {
+    value = eeprom->thickness_c;
 
   } else if (strcmp( name, "analog_read" ) == 0 ) {
     value = analog_read;
@@ -388,7 +388,7 @@ static float expression() {
 }
 
 // given a string, evaluate it.   Example "2*(userdef[49]+2)"
-float expr(const char *s) {
+float expr(const char *s) { 
   ptr = s;
   return expression();
 }

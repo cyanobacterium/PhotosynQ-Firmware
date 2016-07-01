@@ -1,6 +1,5 @@
 
 //  Jon Zeeff, March, 2016
-// test3
 
 #define NUM_DACS 3
 
@@ -11,6 +10,7 @@
 
 // DAC functions
 int DAC_init(void);
+void DAC_shutdown(void);
 void DAC_change(void);
 void DAC_set(unsigned int LED, unsigned int value);
 int DAC_set_address(int ldac_pin, unsigned oldAddress, unsigned newAddress); 

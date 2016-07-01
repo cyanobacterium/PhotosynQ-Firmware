@@ -17,8 +17,7 @@ static const short LED_to_dac[NUM_LEDS] = {0, 0, 0, 2, 0, 1, 2, 1, 1, 1};  // mu
 // map pin number (eg, 0-9) to which DAC channel that pin is on
 static const short LED_to_channel[NUM_LEDS] = {2, 3, 0, 0, 1, 1, 1, 3, 2, 0};   // must be 0,1,2,3
 
-static unsigned short prev_value[NUM_LEDS];  // store prev value so we waste time
-
+static unsigned short prev_value[NUM_LEDS];  // store prev value so we don't waste time
 
 // initialize the DACs
 
@@ -48,6 +47,15 @@ int DAC_init(void)
 
 }  // DAC_init()
 
+
+// shutdown the DAC to save power
+void DAC_shutdown()
+{
+ // set up ldac pins
+  pinMode(LDAC1, INPUT);
+  pinMode(LDAC2, INPUT);
+  pinMode(LDAC3, INPUT);   
+}
 
 // set the DAC value for a particular LED (eg, 1-10)
 // doesn't take effect until DAC_change()

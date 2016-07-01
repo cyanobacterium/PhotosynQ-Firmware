@@ -192,6 +192,7 @@ float cosine_internal(float angle) {
   }
 */
 
+
 float measure_hall() {
   float hall_value = (analogRead(HALL_OUT) + analogRead(HALL_OUT) + analogRead(HALL_OUT)) / 3;
   //  Serial_Printf("final hall_value: %f",hall_value);
@@ -205,24 +206,37 @@ void start_on_open_close() {
   }
   float start_position = measure_hall();
   float current_position = start_position;
-
-  // now measure every 200ms until you see the value change to > 10000 counts
-  while (current_position - start_position < 8000) {
+  int start_time = millis();
+  // now measure every 150ms until you see the value change to 65% of the full range from closed to fully open
+  while (start_position - current_position < .65 * (eeprom->thickness_min - eeprom->thickness_max)) {
     current_position = measure_hall();
-    //        Serial_Printf("start: %f, current: %f\n", start_position, current_position);
-    delay(200);                                                               // measure every 100ms
-    if (current_position - start_position < -2000) {                              // if the person opened it first (ie they did it wrong and started it with clamp open) - detect and skip to end
-      //        Serial_Print("made it");
+    /*
+        Serial.printf("95% to exit, %f < %f\n", start_position - current_position, .85*(eeprom->thickness_min - eeprom->thickness_max));
+        Serial.printf("95% to exit, current: %f, start: %f, max: %f, min: %f\n", current_position,start_position,eeprom->thickness_max,eeprom->thickness_min);
+    */
+    delay(150);                                                               // measure every 100ms
+    if (start_position - current_position < -.20 * (eeprom->thickness_min - eeprom->thickness_max) || current_position == 0 || current_position == 65535 || millis() - start_time > 30000) {       // if the person opened it first (ie they did it wrong and started it with clamp open) - detect and skip to end.  Also if the output is maxed or minned then proceed.
+      /*
+            Serial.printf("if statement to exit, %f < %f\n", start_position - current_position, -.20*(eeprom->thickness_min - eeprom->thickness_max));
+            Serial.print("exit 1\n");
+      */
       goto end;
     }
   }
-  // now measure again every 200ms until you see the value change to < 5000 counts
-  while (current_position  - start_position > 6000) {
+  // now measure again every 150ms until you see the value change to < 65% of the full range from closed to fully open
+  while (start_position - current_position > .65 * (eeprom->thickness_min - eeprom->thickness_max)) {
     current_position = measure_hall();
-    //        Serial_Printf("start: %f, current: %f\n", start_position, current_position);
-    delay(200);                                                               // measure every 200ms
+    /*
+        Serial.printf("65% to exit, %f > %f\n", start_position - current_position, .65*(eeprom->thickness_max - eeprom->thickness_min));
+        Serial.printf("65% to exit, current: %f, start: %f, max: %f, min: %f\n", current_position,start_position,eeprom->thickness_max, eeprom->thickness_min);
+    */
+   if (millis() - start_time > 30000) { // if it's been more than 30 seconds,then bail
+      goto end;
+    }
+    delay(150);                                                               // measure every 150ms
   }
 end:
-  delay(500);                                                               // make sure the clamp has time to settle onto the leaf.
+  delay(300);                                                               // make sure the clamp has time to settle onto the leaf.
+//  Serial.print("exit 2\n");
 }
 

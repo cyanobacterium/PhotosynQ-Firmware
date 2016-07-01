@@ -13,7 +13,7 @@ const int PULSERDEBUG=0;   // uncomment to debug the pulser and detector
 #define CORAL_SPEQ 0
 
 // FIRMWARE VERSION OF THIS FILE (SAVED TO EEPROM ON FIRMWARE FLASH)
-#define DEVICE_FIRMWARE "1.05"
+#define DEVICE_FIRMWARE "1.06"
 #define DEVICE_NAME "MultispeQ"
 #define DEVICE_VERSION "1"
      
@@ -41,13 +41,13 @@ const int PULSERDEBUG=0;   // uncomment to debug the pulser and detector
 // hall effect sensor (analog)
 #define HALL_OUT 35
 
-// Lights - map LED pin # to MCU pin #
+// Lights - map LED pin # to MCU pin #cd 
 // 1-5 on main board, 6-10 on add-on board
 // document colors
 #define PULSE1   5
 #define PULSE2   20
 #define PULSE3   3
-#define PULSE4   10
+#define PULSE4   28      // was 10, now 28
 #define PULSE5   4
 #define PULSE6   24
 #define PULSE7   27
@@ -75,37 +75,39 @@ const int NUM_LEDS=10;
 // map LED (1-10 not 0-9) to MCU pin
 const uint8_t LED_to_pin[NUM_LEDS + 1] = {0, PULSE1, PULSE2, PULSE3, PULSE4, PULSE5, PULSE6, PULSE7, PULSE8, PULSE9, PULSE10 }; // NOTE!  We skip the first element in the array so that the array lines up correctly (PULSE1 == 1, PULSE2 == 2 ... )
 
-// bluetooth
-#define BLERESET 14  // deprecated in favor of power down
-#define DEBUG_DC 2   // could allow reflashing of BLE module
-#define DEBUG_DD 36
+// bluetooth BLE (shared with IOEXTx)
+#define DEBUG_DC 14   // could allow reflashing of BLE module
+#define DEBUG_DD 32
 
 
 // sample and hold (hold + release detector cap)
-#define HOLDM    6
+#define HOLDM    6        // output
 #define HOLDADD 21
 
 // peripheral USB 3.0 connector pins
 #define DACT     40
 #define ADCT     37
-#define IOEXT1   31
+#define IOEXT1   14
 #define IOEXT2   32
 
-// battery management
-// batt_me normally should be pulled high
-// to check battery level, pull batt_me low and then measure batt_test
-// check data sheet for ISET... pull high or low?
-#define ISET     28          // controls charge rate (deprecated)
-#define POWERDOWN_REQUEST 28   // request that BLE module turn off MCU power
-#define BATT_ME  33           // to activate battery voltage sampling
-#define BATT_TEST 34
+// power/battery management
+// note: 5V and analog is used by: LEDs, detectors, external ADC, hall effect and peripheral connector
+
+#define WAKE_DC   2            // output to power up 5V and analog power supplies, active high
+#define WAKE_3V3  31           // output to turn on 3.3V, AKA 3.3V_ON, active low
+#define BAT_MEAS  33           // output to activate battery voltage sampling, active low
+#define BAT_TEST  A10          // input to measure battery voltage
+#define USB_MEAS  A12          // input to measure USB voltage
+
 #define REF_VOLTAGE 1.2
-#define BAT_MIN_LOADED 3.3    // in volts
+#define BAT_MIN_LOADED 3.3    // in volts, below this is too low
 #define BAT_MIN 3.5
 #define BAT_MAX 4.2
 
-/*NOTES*/// blank pin (used when no other pin is selected - probably should change this later
-#define BLANK    32   // error - same as IOEXT2
+#define WAKE_TILT 10          // interrupt from accel to MK20
+
+// blank pin (used when no other pin is selected - probably should change this later
+//#define BLANK    32   // error - same as IOEXT2
 
 
 //struct to hold tilt information
@@ -121,7 +123,7 @@ void powerdown(void);
 uint16_t median16(uint16_t array[], const int n, const float percentile = .50);
 float stdev16(uint16_t array[], const int n);
 int check_protocol(char *str);
-
+void deep_sleep(void);
 
 
 /*

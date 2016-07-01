@@ -1,5 +1,8 @@
 
-// Simple test program for OTA firmware updates on teensy 3.x
+// Simple test program for OTA firmware updates on teensy 3.x using the USB virtual serial link.
+
+// hint:  on Linux, exit the serial console and do "dd if=blink.hex of=/dev/ttyACM0", then restart the Serial console and
+// enter the ":flash xxx" command.
 
 #include <Arduino.h>
 #include "flasher.h"
@@ -15,7 +18,8 @@ static int flash_block(uint32_t address, uint32_t *bytes, int count);
 
 #if 0
 
-// you probably need these, customized for your serial port (ie, Serial, Serial1, etc)
+// You probably need these, customized for your serial port (ie, Serial, Serial1, etc)
+// For use with other communication links (eg, packet radio, CAN, etc), you need to supply your own versions.
 #define Serial_Available()  Serial.available()
 #define Serial_Read()       Serial.read()
 #define Serial_Printf       Serial.printf
@@ -54,13 +58,33 @@ void loop ()
 
 }  // loop()
 
+
+#if 0
+// Example Serial_Printf() if needed as a reference.  With this, you need to write Serial_Print() (probably easier).
+#define SIZE 200
+
+void Serial_Printf(const char * format, ... )
+{
+  char string[SIZE + 1];        // Warning: fixed buffer size
+  va_list v_List;
+  va_start( v_List, format );
+  vsnprintf( string, SIZE, format, v_List );
+
+  //  assert(strlen(string) < SIZE);
+
+  string[SIZE] = 0;
+  Serial_Print(string);
+  va_end( v_List );
+}
 #endif
 
-// *******************************
+#endif
+
+// ********************************************************************************************
 
 // Version 1.3
 
-// code to allow firmware update over a Serial port
+// code to allow firmware update over any byte stream (serial port, radio link, etc)
 // for teensy 3.x.  It is intended that this code always be included in your application.
 
 // Jon Zeeff 2016
@@ -73,15 +97,17 @@ void loop ()
 // particular purpose.
 
 
-// load new firmware over the Serial port and flash it
+// load new firmware over some ascii byte stream and flash it
 // format is an intel hex file followed by ":flash xx" where xx is the number of lines sent
 // Max size is 1/2 of flash
 // TODO  Modify to allow any combination of programs that fit in flash - ie, allow a 64K program to load a 188K program
 
-// hint:  on Linux, exit the serial console and do "dd if=blink.hex of=/dev/ttyACM0", then restart the Serial console and
-// enter the ":flash xxx" command.
+// caution:  it is easy to send too fast.  Writing flash takes awhile - put delays between sending lines.
 
-// caution:  on a serial port, it is easy to send too fast.  Put delays between lines.
+// porting: while the test routine uses a serial port, the only communication link this program needs is supplied by the user supplied routines:
+// Serial_Read() and Serial_Printf() and optionally Serial_Available()
+// See serial.cpp for an example of these routines used for a packetized, error corrected bluetooth link.
+
 
 // TODO - instead of splitting flash in half, use whatever flash is remaining.  This would allow a 64K program to flash
 // a 192K program.  This would allow the two step process of 192K, downgrade to 64K, upgrade to new 192K.
@@ -138,8 +164,9 @@ void upgrade_firmware(void)   // main entry point
 
 // So what happens if you write bad software and it locks up?  How do you execute "upgrade_firmware()" to recover?
 // 1) Always call this routine early in setup()
-// 2) Tie the send and receive lines of the Serial port together and it should recover.
-//    Could also write a program to echo any '@' seen.
+// 2) Tie the send and receive lines of the receiver together and it should recover.
+
+// This routine is optional and can be removed.
 
 void boot_check(void)
 {

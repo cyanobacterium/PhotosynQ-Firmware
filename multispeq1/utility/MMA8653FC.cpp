@@ -10,7 +10,6 @@
 
 #define ledPin 13
 
-
 #define TEST 0
 #if TEST
 
@@ -52,8 +51,8 @@ loop ()
 #endif
 
 // I2C BUS:  already defined in "wire" librairy
-// SDA: PIN 2 with pull up 4.7K to 3.3V on arduino Micro
-// SCL: PIN 3 with pull up 4.7K to 3.3V on arduino Micro
+// SDA
+// SCL
 // Accelerometer connected to +3.3V of arduino DO NOT CONNECT TO 5V (this will destroy the accelerometer!)
 // all GND Pin of accelerometer connected to gnd of arduino
 
@@ -61,6 +60,7 @@ loop ()
 
 // adresss of accelerometer
 #define ADDRESS 0X1D		// MMA8653FC and MMA8652FC
+
 // address of registers for MMA8653FC
 #define ctrl_reg1 0x2A
 #define ctrl_reg2 0x2B
@@ -77,6 +77,12 @@ loop ()
 #define out_z_msb 0x05
 #define sysmod 0x0B
 #define xyz_data_cfg 0x0E
+#define pl_status 0x10
+#define ff_mt_cfg 0x15
+#define ff_mt_src 0x16
+#define ff_mt_ths 0x17
+#define ff_mt_count 0x18
+
 
 //******PROGRAM DATAS**********/
 #define ctrl_reg_address 0     // to understand why 0x00 and not 0x01, look at the data-sheet p.19 or on the comments of the sub. This is valid only becaus we use auto-increment   
@@ -91,6 +97,19 @@ I2C_SEND (unsigned char REG_ADDRESS, unsigned char DATA)  //SEND data
   Wire.write (DATA);
   Wire.endTransmission (I2C_NOSTOP, 1000);
   delayMicroseconds (2);
+}
+
+// READ number data from i2c slave ctrl-reg register and return the result
+
+int
+I2C_READ_REG (int reg_address)
+{
+  Wire.beginTransmission (ADDRESS);	  //=ST + (Device Adress+W(0)) + wait for ACK
+  Wire.write (reg_address);	          // register to read
+  Wire.endTransmission(I2C_NOSTOP, 1000); // stop transmitting
+  delayMicroseconds (2);	          //
+  Wire.requestFrom (ADDRESS, 1);	  // read one byte
+  return Wire.read();
 }
 
 
@@ -112,11 +131,10 @@ MMA8653_who_am_i (void)
 int
 MMA8653FC_init ()
 {
-
   I2C_SEND (ctrl_reg1, 0X00);	        // standby to be able to configure
 
   I2C_SEND (xyz_data_cfg, B00000000);	// 2G full range mode
-  I2C_SEND (ctrl_reg1, B00000001);	// Output data rate at 800Hz, no auto wake, no auto scale adjust, no fast read mode
+  I2C_SEND (ctrl_reg1, B00100001);	// Output data rate at 50Hz, no auto wake, no auto scale adjust, no fast read mode, active
 
   if (MMA8653_who_am_i() == whoami_val)
     return 0;                          // OK
@@ -125,6 +143,28 @@ MMA8653FC_init ()
 
 }
 
+// reduce power draw
+
+void MMA8653FC_low_power()
+{
+  I2C_SEND (ctrl_reg1,  0X00);	        // standby to be able to configure
+  I2C_SEND (ff_mt_cfg,  B01111000);	//
+  I2C_SEND (int_source, B10010100);	// interrupt on wake, orientation change or motion
+  I2C_SEND (ctrl_reg4,  B11111111);	// Interrupt enable on anything
+  I2C_SEND (ctrl_reg5,  B00000000);	// Use INT2
+
+  // clear previous interrupts
+  I2C_READ_REG(sysmod);
+  I2C_READ_REG(pl_status);
+  I2C_READ_REG(ff_mt_src);
+  
+  I2C_SEND (ctrl_reg1,  B01101001);	// Output data rate at 12Hz, active
+}
+
+void MMA8653FC_standby()
+{
+  I2C_SEND (ctrl_reg1,  0X00);	        // standby mode for lowest power
+}
 
 
 //------------------------------------------------------------------
@@ -135,7 +175,7 @@ void
 MMA8653FC_read(int *axeXnow, int *axeYnow, int *axeZnow)
 {
 
-  Wire.beginTransmission (ADDRESS);	  //=ST + (Device Adress+W(0)) + wait for ACK
+  Wire.beginTransmission (ADDRESS);	  //= ST + (Device Adress+W(0)) + wait for ACK
   Wire.write (ctrl_reg_address);	  // store the register to read in the buffer of the wire library
   Wire.endTransmission (I2C_NOSTOP,1000); // actually send the data on the bus -note: returns 0 if transmission OK-
   delayMicroseconds (2);	          //
@@ -154,22 +194,4 @@ MMA8653FC_read(int *axeXnow, int *axeYnow, int *axeZnow)
 
 //------------------------------------------------------------------
 
-
-
-
-
-#if 0
-// READ number data from i2c slave ctrl-reg register and return the result
-
-int
-I2C_READ_REG (int ctrlreg_address)
-{
-  Wire.beginTransmission (ADDRESS);	  //=ST + (Device Adress+W(0)) + wait for ACK
-  Wire.write (ctrlreg_address);	          // register to read
-  Wire.endTransmission(I2C_NOSTOP, 1000); // stop transmitting
-  delayMicroseconds (2);	          //
-  Wire.requestFrom (ADDRESS, 1);	  // read one byte
-  return Wire.read();
-}
-#endif
 

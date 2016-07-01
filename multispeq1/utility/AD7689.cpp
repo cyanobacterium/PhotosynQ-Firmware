@@ -147,6 +147,14 @@ AD7689_set (int chan, uint16_t config)
 
 }
 
+// save power
+void
+AD7689_shutdown ()
+{
+  pinMode (AD7689_PIN, INPUT);      // set to high impedance
+}
+
+
 // start the conversion - very time accurate, takes 1.8 usec
 
 //inline void AD7689_sample() __attribute__((always_inline));

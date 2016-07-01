@@ -6,27 +6,27 @@
 {
 
 case hash("cut_through"):
-    extern int cut_through;
-    cut_through = 1;
-    break;
-    
+  extern int cut_through;
+  cut_through = 1;
+  break;
+
 case hash("feed_watchdog"):
-    feed_watchdog();
-    break;
+  feed_watchdog();
+  break;
 
 case hash("start_watchdog"):
-    start_watchdog((int)Serial_Input_Long("\r\n+",1000));      // enter time in minutes
-    break;
+  start_watchdog((int)Serial_Input_Long("\r\n+", 1000));     // enter time in minutes
+  break;
 
 case hash("stop_watchdog"):
-    stop_watchdog();
-    break;
+  stop_watchdog();
+  break;
 
 case hash("expr"):
   {
-  char c[100];
-  Serial_Input_Chars(c, "\r\n", 1000, sizeof(c) - 1);  // no plus since that is a operator
-  Serial_Printf("%g\n", expr(c));
+    char c[100];
+    Serial_Input_Chars(c, "\r\n", 1000, sizeof(c) - 1);  // no plus since that is a operator
+    Serial_Printf("%g\n", expr(c));
   }
   break;
 
@@ -42,7 +42,7 @@ case hash("readonce"):                           // access write once flash
   delay(1);
   //Serial_Printf("0,E,F = %x %x %x\n",read_once(0x0), read_once(0xe), read_once(0xf));
   break;
- 
+
 case hash("set_date"):
   {
     Serial_Print_Line("enter GMT hours+min+sec+day+month+year+");
@@ -60,49 +60,84 @@ case hash("set_date"):
   // fall through to print
 case hash("print_date"):
   // example: 2004-02-12T15:19:21.000Z and also seconds since 1970
-  Serial_Printf("{\"device_time\":\"%4.4d-%2.2d-%2.2dT%2.2d:%2.2d:%2.2d.000Z\",\"device_time\":%u}\n", year(), month(), day(), hour(), minute(), second(),now());
-  break;
-
-case hash("powerdown"):
-  // legacy version
-  pinMode(POWERDOWN_REQUEST, OUTPUT);     //  bring P0.6 (2nd pin) low
-  digitalWrite(POWERDOWN_REQUEST, LOW);
-  delay(11000);                  // device should power off here - P0.5 (third pin) should go low
-  digitalWrite(POWERDOWN_REQUEST, HIGH); // put it back
+  Serial_Printf("{\"device_time\":\"%4.4d-%2.2d-%2.2dT%2.2d:%2.2d:%2.2d.000Z\",\"device_time\":%u}\n", year(), month(), day(), hour(), minute(), second(), now());
   break;
 
 case hash("battery"):
-  Serial_Printf("{\"battery\":%d}\n",battery_percent(1));    // test with load
+  Serial_Printf("{\"battery\":%d}\n", battery_percent(1));   // test with load
   break;
 
 case hash("scan_i2c"):
+  Serial_Print_Line("0x0E = compass, 0x1D = accel, 0x61 = DAC1?, 0x63 = DAC2?, 0x5B = IR, 0x76/77 = BME280s, 0x29 = PAR/color");
   scan_i2c();
   break;
 
 case hash("sleep"):
   Serial_Print_Line("start sleeping");
-  sleep_mode(5000);
+  delay(500);
+  int accel_changed();
+
+  accel_changed();   // get an initial reading
+  shutoff();         // turn off most pins and power
+  
+  MMA8653FC_standby();                            // sleep accelerometer
+  pinMode(18, INPUT);                             // turn off I2C pins
+  pinMode(19, INPUT);                             // or use Wire.end()?
+
+  deep_sleep();
+
+#if 0
+  sleep_mode(60000);    // sleep till interrupt
+#else
+
+  for (;;) {                 // sleep, but poll accelerometer
+    // turn I2C back on
+    //Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_INT, I2C_RATE_100);  // using alternative wire library
+    //delay(100);
+
+    if (accel_changed() /* && !battery_low(0) */)
+      break;
+    else {
+      //pinMode(18, INPUT);       // turn I2C off
+      //pinMode(19, INPUT);
+      //turn_off_3V3();
+      sleep_mode(200);          // sleep for 200 ms (can be much longer if accel interrupts on movement)
+    }
+  }
+#endif
+
+  setup();
+  delay(3000);
   Serial_Print_Line("done sleeping");
+  delay(500);
+  Serial_Flush_Output();
   break;
 
-case hash("packet_test"):
-  {
-    Serial_Print("let's start with a test, this is more than 20 chars long.\n");
-    Serial_Flush_Output();
-    char c[2];
-    int count = 0;
-    c[1] = 0;
-    for (;;)  {
-      c[0] = Serial_Read();
-      Serial_Print(c);
-      if (c[0] < ' ') continue;
-      ++count;
-      if (c[0] == 'X')
-        break;
-    } // for
-    Serial_Printf("%d chars\n", count);
-    Serial_Flush_Output();
-  }
+case hash("pulse"):
+  turn_on_5V();                     // is normally off, but many of the below commands need it
+  Serial_Print_Line("PULSE4/5 on");
+  DAC_set(4, 100);
+  DAC_change();
+  digitalWriteFast(PULSE4, HIGH);
+  DAC_set(5, 100);
+  DAC_change();
+  digitalWriteFast(PULSE5, HIGH);
+  break;
+
+case hash("dac50"):                 // for testing
+  turn_on_5V();                     // is normally off, but many of the below commands need it
+  Serial_Print_Line("set all DAC outputs to 50%");
+  DAC_set(1, 2048);
+  DAC_set(2, 2048);
+  DAC_set(3, 2048);
+  DAC_set(4, 2048);
+  DAC_set(5, 2048);
+  DAC_set(6, 2048);
+  DAC_set(7, 2048);
+  DAC_set(8, 2048);
+  DAC_set(9, 2048);
+  DAC_set(10, 2048);
+  DAC_change();
   break;
 
 case hash("compiled"):
@@ -144,7 +179,8 @@ case hash("single_pulse"):
     const int SAMPLES = 100;
     uint16_t val[SAMPLES];
     Serial_Print_Line("JZ test");
-    DAC_set(LED, 300);                             // set LED intensity
+    turn_on_5V();                                   // is normally off, but many of the below commands need it
+    DAC_set(LED, 300);                              // set LED intensity
     DAC_change();
     AD7689_set(0);                                  // select ADC channel
     digitalWriteFast(HOLDM, HIGH);                  // discharge cap
@@ -176,8 +212,9 @@ case hash("p2p"):
     // with constant DAC value and pulse width, it is good for a pulse-to-pulse stdev test
     const int LED = 5;                              // 1 = green, 2 = red, 3 = yellow, 5 = IR (keep DAC < 100)
     Serial_Print_Line("using delay - wait...");
+    turn_on_5V();                                   // is normally off, but many of the below commands need it
     AD7689_set(0);                                  // 0 is main detector
-    DAC_set(LED, 700);                               // set initial LED intensity
+    DAC_set(LED, 700);                              // set initial LED intensity
     DAC_change();
     const int MAX = 100;                            // try a variety of intensities 0 up to 4095
     int count = 0;
@@ -187,19 +224,19 @@ case hash("p2p"):
       //DAC_set(LED, i);                              // change LED intensity
       //DAC_change();
       digitalWriteFast(HOLDM, HIGH);                  // discharge cap
-      delay(33);                                     // also allows LED to cool and DC filter to adjust
+      delay(33);                                      // also allows LED to cool and DC filter to adjust
       noInterrupts();
       digitalWriteFast(LED_to_pin[LED], HIGH);        // turn on LED
       delayMicroseconds(10);                          // allow slow actopulser to stabilize
       digitalWriteFast(HOLDM, LOW);                   // start integrating
-      delayMicroseconds(i);                          // pulse width (depends on sensitivity needed)
+      delayMicroseconds(i);                           // pulse width (depends on sensitivity needed)
       digitalWriteFast(LED_to_pin[LED], LOW);         // turn off LED
       const int SAMPLES = 21;                         // reduce noise with multiple reads
       uint16_t val[SAMPLES];
       AD7689_read_array(val, SAMPLES);                // read values
       interrupts();
       data[count] = median16(val, SAMPLES);
-      if (data[count] >= 65535) break;                 // saturated the ADC, no point in continuing
+      if (data[count] >= 65535) break;                // saturated the ADC, no point in continuing
       Serial_Printf(" % d, % d\n", i, data[count]);
       ++count;
     } // for
@@ -215,15 +252,16 @@ case 4048:
     // with constant DAC value and pulse width, it is good for a pulse-to-pulse stdev test
     const int LED = 5;                              // 1 = green, 2 = red, 3 = yellow, 5 = IR (keep DAC < 100)
     Serial_Print_Line("wait...");
+    turn_on_5V();                                   // is normally off, but many of the below commands need it
     AD7689_set(0);                                  // 0 is main detector
-    DAC_set(LED, 200);                               // set initial LED intensity
+    DAC_set(LED, 200);                              // set initial LED intensity
     DAC_change();
     const int MAX = 200;                            // try a variety of intensities 0 up to 4095
     int count = 0;
     uint16_t data[100];
 
     _meas_light = LED;
-    _pulsesize = 30 + 10;                  // account for actopulser delay
+    _pulsesize = 30 + 10;                           // account for actopulser delay
     unsigned _pulsedistance = 2000;                 // lower has less jitter
 
     startTimers(_pulsedistance);        // schedule continuous LED pulses
