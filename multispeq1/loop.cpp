@@ -13,7 +13,8 @@
 #include "util.h"
 #include "malloc.h"
 #include <i2c_t3.h>
-#include "src/TCS3471.h"              // color sensor
+//#include "src/TCS3471.h"              // color sensor
+#include "src/Adafruit_TCS34725.h"              // color sensor
 
 // function declarations
 
@@ -54,7 +55,7 @@ void configure_bluetooth(void);
 void reboot(void);
 void turn_on_3V3(void);
 void turn_on_5(void);
-void constant_light (void);
+void constant_light ();
 
 struct theReadings {                                            // use to return which readings are associated with the environmental_array calls
   const char* reading1;
@@ -164,10 +165,12 @@ void do_command()
       break;
 
     case hash("constant_light"):
+    {
       turn_on_5V();                     // is normally off, but many of the below commands need it
-      Serial_Print("Starting constant light source");
+      Serial_Print("[{\"message\":\"Starting constant light source\"");
       constant_light();
       break;
+    }
 
     case hash("cycle5v"):
       Serial_Print_Line("turning off 5v in 3 seconds...");
@@ -2300,25 +2303,23 @@ static void environmentals(JsonArray environmental, const int _averages, const i
     else if (thisSensor == "analog_write") {                      // perform analog write with length of time to apply the pwm
       int pin = environmental.getArray(i).getLong(1);
       int setting = environmental.getArray(i).getLong(2);
-      int freq = environmental.getArray(i).getLong(3);
+      int resolution = environmental.getArray(i).getLong(3);
       int wait = environmental.getArray(i).getLong(4);
 
+      // create lookup table for resolution and frequency settings (values start at position 2 for a resolution of 2):
+      float freq_table [] = {0,0,15000000,7500000, 3750000, 1875000, 937500, 468750, 234375, 117187.5, 58593.75,29296.875,14648.437, 7324.219, 3662.109, 1831.055, 915.527};
+
+//      Serial_Printf("pin = %d, setting = %d, resolution = %d, wait = %d",pin, setting, resolution, wait);
+
       // TODO sanity checks
-
-#ifdef DEBUGSIMPLE
-      Serial_Print_Line(pin);
-      Serial_Print_Line(pin);
-      Serial_Print_Line(wait);
-      Serial_Print_Line(setting);
-      Serial_Print_Line(freq);
-#endif
-
+      
       pinMode(pin, OUTPUT);
-      analogWriteFrequency(pin, freq);                                                           // set analog frequency
+      analogWriteFrequency(pin, freq_table[resolution]);                                                           // set analog frequency
+      analogWriteResolution(resolution);                                                           // set analog frequency
       analogWrite(pin, setting);
       delay(wait);
       analogWrite(pin, 0);
-      //reset_freq();                                                                              // reset analog frequencies
+      analogWriteResolution(12);                                                                  // reset analog resolution
     } // if
   } // for
 }  //environmentals()
@@ -2327,34 +2328,6 @@ static void print_all () {
   // print every value saved in eeprom in valid json structure (even the undefined values which are still 0)
   Serial_Printf("light_intensity:%g\n", light_intensity);
 }
-
-#if 0
-// ??  why
-void reset_freq() {
-  analogWriteFrequency(5, 187500);                                               // reset timer 0
-  analogWriteFrequency(3, 187500);                                               // reset timer 1
-  analogWriteFrequency(25, 488.28);                                              // reset timer 2
-  /*
-    Teensy 3.0              Ideal Freq:
-    16      0 - 65535       732 Hz          366 Hz
-    15      0 - 32767       1464 Hz         732 Hz
-    14      0 - 16383       2929 Hz         1464 Hz
-    13      0 - 8191        5859 Hz         2929 Hz
-    12      0 - 4095        11718 Hz        5859 Hz
-    11      0 - 2047        23437 Hz        11718 Hz
-    10      0 - 1023        46875 Hz        23437 Hz
-    9       0 - 511         93750 Hz        46875 Hz
-    8       0 - 255         187500 Hz       93750 Hz
-    7       0 - 127         375000 Hz       187500 Hz
-    6       0 - 63          750000 Hz       375000 Hz
-    5       0 - 31          1500000 Hz      750000 Hz
-    4       0 - 15          3000000 Hz      1500000 Hz
-    3       0 - 7           6000000 Hz      3000000 Hz
-    2       0 - 3           12000000 Hz     6000000 Hz
-
-  */
-}
-#endif
 
 void print_calibrations() {
   unsigned i;
