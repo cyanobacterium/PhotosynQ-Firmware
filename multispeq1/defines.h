@@ -48,18 +48,17 @@ const int PULSERDEBUG=0;   // uncomment to debug the pulser and detector
 #define MOSI1    11       // SPI pins
 #define MISO1    12
 
-#define MOSI2    7
-#define MISO2    8
-
 #define SDA1     18       // I2C
 #define SCL1     19
 
 #define SCL2     29
 #define SDA2     30
 
+#define EXTERNAL_I2C_CLOCK 7
+#define EXTERNAL_I2C_DATA 8
+
 #define SS1      22
 #define SCK1     13
-#define SS2      9
 
 // hall effect sensor (analog)
 #define HALL_OUT 35
