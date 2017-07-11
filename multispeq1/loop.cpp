@@ -14,6 +14,8 @@
 #include "malloc.h"
 #include <i2c_t3.h>
 #include "src/TCS3471.h"              // color sensor
+#include "I2C.h"
+#include <stdint.h>
 
 // function declarations
 
@@ -1622,6 +1624,8 @@ if (protocol_set_mode==1) {
         //*/
         JsonArray environmental = hashTable.getArray("environmental");
         JsonArray environmental_array = hashTable.getArray("environmental_array");
+        
+        JsonArray i2c_list = hashTable.getArray("i2c");
     
         JsonArray autogain = hashTable.getArray("autogain");
 
@@ -3090,6 +3094,117 @@ float get_adc_read3 (int adc_channel, int _averages) {       // adc channels 1 -
   adc_read3 = AD7689_read(adc_channel + 3);
   adc_read3_averaged += (float) adc_read3 / _averages;
   return adc_read3;
+}
+
+static void i2c_events(JsonArray ic2_list){
+  /*
+   * Here's an example of a hypothetica communication with two different attached I2C 
+   * devices: a 3-axis rotation sensor and a servo. In this hypothetical example, the 
+   * rotation sensor requires 2 bytes to be written to specify a register number and a 
+   * command byte before it returns 3 16-bit integers (lower-byte first), while the 
+   * servo is simply given a 16bit integer (upper-byte first) specifying the angle to 
+   * move to (in this case, 330 degrees). 
+"i2c": [
+ {
+  "name":"angleSensor",
+  "address":15,
+  "rw":[0,0,1,1,1,1,1,1],
+  "bytes":[11,3,0,0,0,0,0,0],
+  "wordsize":2,
+  "bigendian":false
+ },
+ {
+  "name":"setServo",
+  "address":2,
+  "rw":[0,0],
+  "bytes":[1,74]
+ },
+]
+   * The output from the above will look like this:
+"sample":{
+ "angleSensor":[303,100,65535]
+}
+   */
+  uint8_t byte_buffer [ EXTERNAL_I2C_BUFFER_CAPACITY ];
+  uint8_t rw_buffer [ EXTERNAL_I2C_BUFFER_CAPACITY ];
+  for (int i = 0; i < ic2_list.getLength(); i++) {
+    JsonHashTable operation = i2c_list.getHashTable(i);
+
+    uint8_t address = (uint8_t)operation.getLong("address");
+    
+    JsonArray data = operation.getArray("bytes");
+    int buffer_size = data.getLength();
+    if(buffer_size >= EXTERNAL_I2C_BUFFER_CAPACITY ){
+      buffer_size = EXTERNAL_I2C_BUFFER_CAPACITY - 1;
+    }
+    for (int n = 0; n < buffer_size; n++) {
+      byte_buffer[n] = (uint8_t)data.getLong(n);
+    }
+    
+    JsonArray rw_array = operation.getArray("rw");
+    bool write_only = true;
+    for (int n = 0; n < rw_array.getLength(); n++) {
+      uint8_t rwBit = (uint8_t)rw_array.getLong(n);
+      if(rwBit != 0){
+        write_only = false;
+      }
+      rw_buffer[n] = rwBit;
+    }
+
+    if(write_only){
+      // simplest use case, only writing bytes to teh I2C bus
+      external_i2c( address, byte_buffer, rw_buffer, buffer_size);
+      continue;
+    }
+    // more complicated: read data back, process it, and add it to "sample" array
+    char* i2c_name = operation.getString("name");
+    int wordsize = 1;
+    if(operation.containsKey("wordsize")){
+      wordsize = (uint8_t)operation.getLong("wordsize");
+    }
+    bool bigendian = true;
+    if(operation.containsKey("bigendian")){
+      bigendian = operation.getBool("bigendian");
+    }
+    // do the I2C
+    external_i2c( address, byte_buffer, rw_buffer, buffer_size);
+    // process the read-back
+    // first, cut the write data out of the byte buffer
+    int read_count = 0;
+    for (int n = 0; n < buffer_size; n++) {
+      if(rw_buffer[n] != 0){
+        byte_buffer[read_count] = byte_buffer[n];
+        read_count++;
+      }
+    }
+    // start printing the output
+    Serial_Print("\""); 
+    Serial_Print(i2c_name); 
+    Serial_Print("\":["); 
+    // next, re-read the buffer as integers using the proper word-size and byte order
+    int word_index = 0;
+    while( word_index  < read_count){
+      if(word_index > 0){
+        Serial_Print(",");
+      }
+      int next_index = word_index + wordsize;
+      uint32_t value = 0;
+      if(bigendian){
+        // bytes are in network order
+        for( int j = 0; j < wordsize; j++){
+          value = (value << 8) | (byte_buffer[word_index + j] & 0xFF);
+        }
+      }else{
+        // bytes are in reverse order
+        for( int j = wordsize - 1; j >= 0; j--){
+          value = (value << 8) | (byte_buffer[word_index + j] & 0xFF);
+        }
+      }
+      Serial_Print(value);
+      word_index += wordsize;
+    }
+    Serial_Print("],");
+  }
 }
 
 // check for commands to read various envirmental sensors

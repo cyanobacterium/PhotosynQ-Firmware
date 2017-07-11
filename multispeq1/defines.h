@@ -56,6 +56,7 @@ const int PULSERDEBUG=0;   // uncomment to debug the pulser and detector
 
 #define EXTERNAL_I2C_CLOCK 7
 #define EXTERNAL_I2C_DATA 8
+#define EXTERNAL_I2C_BUFFER_CAPACITY 256
 
 #define SS1      22
 #define SCK1     13

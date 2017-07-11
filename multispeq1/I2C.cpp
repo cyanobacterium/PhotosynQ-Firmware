@@ -1,8 +1,8 @@
 #include "I2C.h"
 // See the .h file for documentation
 
-const unint8_t I2C_READ = 1;
-const unint8_t I2C_WRITE = 0;
+const uint8_t I2C_READ_BIT = 1;
+const uint8_t I2C_WRITE_BIT = 0; 
 
 void external_i2c(uint8_t address, uint8_t * data_buffer, uint8_t * rw_array, int buffer_size) {
 	// first, check if this is a read-only or mixed read-write
