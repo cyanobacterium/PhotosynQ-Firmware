@@ -1,5 +1,7 @@
 
 // Global defines and some misc functions
+#ifndef DEFINES_H
+#define DEFINES_H
 
 #include <Arduino.h>
 #include <stdint.h>
@@ -268,3 +270,5 @@ EXTERN unsigned long spec_data_average[SPEC_CHANNELS];            // saves the a
 EXTERN int idx;
 
 #undef EXTERN
+
+#endif
