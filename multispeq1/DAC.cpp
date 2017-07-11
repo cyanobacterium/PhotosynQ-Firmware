@@ -11,12 +11,23 @@
 
 static mcp4728 *dac[NUM_DACS];    // pointer only - initialize under more controlled circumstances so debugging is possible
 
+#if CORAL_SPEQ == 1
+
+// map LED number (here numbered 0-7) to which DAC IC that pin is on
+static const short LED_to_dac[NUM_LEDS] = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2};  // must be 0,1
+
+// map pin number (eg, 0-9) to which DAC channel that pin is on
+static const short LED_to_channel[NUM_LEDS] = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1};   // must be 0,1,2,3
+
+#else
+
 // map LED number (here numbered 0-9) to which DAC IC that pin is on
 static const short LED_to_dac[NUM_LEDS] = {0, 0, 0, 2, 0, 1, 2, 1, 1, 1};  // must be 0,1,2
 
 // map pin number (eg, 0-9) to which DAC channel that pin is on
 static const short LED_to_channel[NUM_LEDS] = {2, 3, 0, 0, 1, 1, 1, 3, 2, 0};   // must be 0,1,2,3
 
+#endif
 static unsigned short prev_value[NUM_LEDS];  // store prev value so we don't waste time
 
 // initialize the DACs
