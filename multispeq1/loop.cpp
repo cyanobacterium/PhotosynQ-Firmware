@@ -36,6 +36,7 @@ void perform_absorbance(JsonArray absorbance, String title, float scale, int det
 void temp_get_set_device_info();
 int abort_cmd(void);
 static void environmentals(JsonArray a, const int _averages, const int x, int oneOrArray);
+static void i2c_events(JsonArray ic2_list);
 void readSpectrometer(int intTime, int delay_time, int read_time, int accumulateMode);
 void MAG3110_read (int *x, int *y, int *z);
 void MMA8653FC_read(int *axeXnow, int *axeYnow, int *axeZnow);
@@ -1624,8 +1625,12 @@ if (protocol_set_mode==1) {
         //*/
         JsonArray environmental = hashTable.getArray("environmental");
         JsonArray environmental_array = hashTable.getArray("environmental_array");
-        
-        JsonArray i2c_list = hashTable.getArray("i2c");
+
+        bool has_i2c_events = hashTable.containsKey("i2c");
+        JsonArray i2c_list;
+        if(has_i2c_events){
+          i2c_list = hashTable.getArray("i2c");
+        }
     
         JsonArray autogain = hashTable.getArray("autogain");
 
@@ -2172,6 +2177,11 @@ if (protocol_set_mode==1) {
 
             digitalWriteFast(HOLDM, HIGH);                            // discharge integrators
             digitalWriteFast(HOLDADD, HIGH);
+
+            // do I2C
+            if(has_i2c_events){
+              i2c_events(i2c_list);
+            }
 
             if (env_counter > 0) {                                                                                // check to see if there are any objects in environmental array (this saves some time as calling .getLength on environmental_array can take some time)
               environmentals(environmental_array, averages, x, 1);
@@ -3096,7 +3106,7 @@ float get_adc_read3 (int adc_channel, int _averages) {       // adc channels 1 -
   return adc_read3;
 }
 
-static void i2c_events(JsonArray ic2_list){
+
   /*
    * Here's an example of a hypothetica communication with two different attached I2C 
    * devices: a 3-axis rotation sensor and a servo. In this hypothetical example, the 
@@ -3125,10 +3135,11 @@ static void i2c_events(JsonArray ic2_list){
  "angleSensor":[303,100,65535]
 }
    */
+static void i2c_events(JsonArray ic2_list){
   uint8_t byte_buffer [ EXTERNAL_I2C_BUFFER_CAPACITY ];
   uint8_t rw_buffer [ EXTERNAL_I2C_BUFFER_CAPACITY ];
   for (int i = 0; i < ic2_list.getLength(); i++) {
-    JsonHashTable operation = i2c_list.getHashTable(i);
+    JsonHashTable operation = ic2_list.getHashTable(i);
 
     uint8_t address = (uint8_t)operation.getLong("address");
     
@@ -3200,7 +3211,7 @@ static void i2c_events(JsonArray ic2_list){
           value = (value << 8) | (byte_buffer[word_index + j] & 0xFF);
         }
       }
-      Serial_Print(value);
+      Serial_Print((const unsigned )value);
       word_index += wordsize;
     }
     Serial_Print("],");
