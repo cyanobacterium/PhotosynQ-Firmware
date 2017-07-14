@@ -1939,6 +1939,11 @@ if (protocol_set_mode==1) {
           float _main_start = 0;                                                               // main detector (sample) value at data point 0 - initial value for normalizing the reference (normalized based on the values from main and reference in the first point in the trace)
           uint16_t _number_samples = 0;                                                               // create the adc sampling rate number
 
+          // do I2C
+          if(has_i2c_events){
+            i2c_events(i2c_list);
+          }
+
           environmentals(environmental, averages, x, 0);
 
           for (int z = 0; z < total_pulses; z++) {                                      // cycle through all of the pulses from all cycles
@@ -2178,10 +2183,6 @@ if (protocol_set_mode==1) {
             digitalWriteFast(HOLDM, HIGH);                            // discharge integrators
             digitalWriteFast(HOLDADD, HIGH);
 
-            // do I2C
-            if(has_i2c_events){
-              i2c_events(i2c_list);
-            }
 
             if (env_counter > 0) {                                                                                // check to see if there are any objects in environmental array (this saves some time as calling .getLength on environmental_array can take some time)
               environmentals(environmental_array, averages, x, 1);
