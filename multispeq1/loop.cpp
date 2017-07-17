@@ -1331,11 +1331,17 @@ if ((start_of_protocol_set == 0) || (start_of_protocol_set == NULL)) {  //if thi
     for (char *ptr = serial_buffer; ptr<  end_pointer ; ptr++) {         // increments through each char in incoming transmission - if it's open curly, it saves all chars until closed curly.  Any other char is ignored.
     //for (unsigned i = 1; i < length_of_serial_buffer; i++) {
       if (*ptr == '{') {                               // wait until you see a open curly bracket
-        while (*ptr != '}') {                          // once you see it, save incoming data to json2 until you see closed curly bracket
-          json2[number_of_protocols] += *ptr;          // add single char to json
+        uint8_t object_depth = 1;
+        while(object_depth > 0){
+          
+          json2[number_of_protocols] += *ptr;
           ptr++;
+          if (*ptr == '{') {                           // count the nested curly braces until back to 0 depth
+            object_depth++;                            // storing the data in between
+          } else if (*ptr == '}'){
+            object_depth--;
+          }
         }
-
         json2[number_of_protocols] += *ptr;           // catch the last closed curly
         number_of_protocols++;
       }
@@ -1424,9 +1430,16 @@ else {  // If we get here true, this is a "_protocol_set_", and the data will be
   number_of_protocols = 0;
     for (char *ptr = new_begin_ptr; ptr<new_end_ptr ; ptr++) {         // increments through each char in incoming transmission - if it's open curly, it saves all chars until closed curly.  Any other char is ignored.
       if (*ptr == '{') {                               // wait until you see a open curly bracket
-        while (*ptr != '}') {                          // once you see it, save incoming data to json2 until you see closed curly bracket
-          json2[number_of_protocols] += *ptr;          // add single char to json
+        uint8_t object_depth = 1;
+        while(object_depth > 0){
+          
+          json2[number_of_protocols] += *ptr;
           ptr++;
+          if (*ptr == '{') {                           // count the nested curly braces until back to 0 depth
+            object_depth++;                            // storing the data in between
+          } else if (*ptr == '}'){
+            object_depth--;
+          }
         }
         json2[number_of_protocols] += *ptr;           // catch the last closed curly
         number_of_protocols++;
