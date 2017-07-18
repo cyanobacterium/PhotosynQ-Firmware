@@ -3174,16 +3174,16 @@ static void i2c_events(JsonArray ic2_list){
     // a single object can specify both write and read
     if(operation.containsKey("read")){
       // read I2C
-      int buffer_size = operation.getLong("read");
-      if(buffer_size > EXTERNAL_I2C_BUFFER_CAPACITY ){
-        buffer_size = EXTERNAL_I2C_BUFFER_CAPACITY;
-      }
       
-      // read data back, process it, and add it to "sample" array
       char* i2c_name = operation.getString("name");
       uint8_t wordsize = 1;
       if(operation.containsKey("wordsize")){
         wordsize = (uint8_t)operation.getLong("wordsize");
+      }
+      
+      int buffer_size = operation.getLong("read") * wordsize;
+      if(buffer_size > EXTERNAL_I2C_BUFFER_CAPACITY ){
+        buffer_size = EXTERNAL_I2C_BUFFER_CAPACITY;
       }
       bool bigendian = true;
       if(operation.containsKey("bigendian")){
