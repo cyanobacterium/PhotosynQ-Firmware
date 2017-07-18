@@ -3132,17 +3132,20 @@ float get_adc_read3 (int adc_channel, int _averages) {       // adc channels 1 -
  {
   "name":"angleSensor",
   "address":15,
-  "rw":[0,0,1,1,1,1,1,1],
-  "bytes":[11,3,0,0,0,0,0,0],
+  "write":[11,3]
+ },
+ {
+  "name":"angleSensor",
+  "address":15,
+  "read":3,
   "wordsize":2,
   "bigendian":false
  },
  {
   "name":"setServo",
   "address":2,
-  "rw":[0,0],
-  "bytes":[1,74]
- },
+  "write":[1,74]
+ }
 ]
    * The output from the above will look like this:
 "sample":{
@@ -3151,84 +3154,71 @@ float get_adc_read3 (int adc_channel, int _averages) {       // adc channels 1 -
    */
 static void i2c_events(JsonArray ic2_list){
   uint8_t byte_buffer [ EXTERNAL_I2C_BUFFER_CAPACITY ];
-  uint8_t rw_buffer [ EXTERNAL_I2C_BUFFER_CAPACITY ];
   for (int i = 0; i < ic2_list.getLength(); i++) {
     JsonHashTable operation = ic2_list.getHashTable(i);
 
     uint8_t address = (uint8_t)operation.getLong("address");
-    
-    JsonArray data = operation.getArray("bytes");
-    int buffer_size = data.getLength();
-    if(buffer_size >= EXTERNAL_I2C_BUFFER_CAPACITY ){
-      buffer_size = EXTERNAL_I2C_BUFFER_CAPACITY - 1;
-    }
-    for (int n = 0; n < buffer_size; n++) {
-      byte_buffer[n] = (uint8_t)data.getLong(n);
-    }
-    
-    JsonArray rw_array = operation.getArray("rw");
-    bool write_only = true;
-    for (int n = 0; n < rw_array.getLength(); n++) {
-      uint8_t rwBit = (uint8_t)rw_array.getLong(n);
-      if(rwBit != 0){
-        write_only = false;
-      }
-      rw_buffer[n] = rwBit;
-    }
 
-    if(write_only){
-      // simplest use case, only writing bytes to teh I2C bus
-      external_i2c( address, byte_buffer, rw_buffer, buffer_size);
-      continue;
-    }
-    // more complicated: read data back, process it, and add it to "sample" array
-    char* i2c_name = operation.getString("name");
-    int wordsize = 1;
-    if(operation.containsKey("wordsize")){
-      wordsize = (uint8_t)operation.getLong("wordsize");
-    }
-    bool bigendian = true;
-    if(operation.containsKey("bigendian")){
-      bigendian = operation.getBool("bigendian");
-    }
-    // do the I2C
-    external_i2c( address, byte_buffer, rw_buffer, buffer_size);
-    // process the read-back
-    // first, cut the write data out of the byte buffer
-    int read_count = 0;
-    for (int n = 0; n < buffer_size; n++) {
-      if(rw_buffer[n] != 0){
-        byte_buffer[read_count] = byte_buffer[n];
-        read_count++;
+    if(operation.containsKey("write")){
+      // write I2C
+      JsonArray data = operation.getArray("write");
+      int buffer_size = data.getLength();
+      if(buffer_size > EXTERNAL_I2C_BUFFER_CAPACITY ){
+        buffer_size = EXTERNAL_I2C_BUFFER_CAPACITY;
       }
-    }
-    // start printing the output
-    Serial_Print("\""); 
-    Serial_Print(i2c_name); 
-    Serial_Print("\":["); 
-    // next, re-read the buffer as integers using the proper word-size and byte order
-    int word_index = 0;
-    while( word_index  < read_count){
-      if(word_index > 0){
-        Serial_Print(",");
+      for (int n = 0; n < buffer_size; n++) {
+        byte_buffer[n] = (uint8_t)data.getLong(n);
       }
-      int next_index = word_index + wordsize;
-      uint32_t value = 0;
-      if(bigendian){
-        // bytes are in network order
-        for( int j = 0; j < wordsize; j++){
-          value = (value << 8) | (byte_buffer[word_index + j] & 0xFF);
+      external_i2c( address, byte_buffer, false, buffer_size);
+    }
+    // a single object can specify both write and read
+    if(operation.containsKey("read")){
+      // read I2C
+      int buffer_size = operation.getLong("read");
+      if(buffer_size > EXTERNAL_I2C_BUFFER_CAPACITY ){
+        buffer_size = EXTERNAL_I2C_BUFFER_CAPACITY;
+      }
+      
+      // read data back, process it, and add it to "sample" array
+      char* i2c_name = operation.getString("name");
+      uint8_t wordsize = 1;
+      if(operation.containsKey("wordsize")){
+        wordsize = (uint8_t)operation.getLong("wordsize");
+      }
+      bool bigendian = true;
+      if(operation.containsKey("bigendian")){
+        bigendian = operation.getBool("bigendian");
+      }
+      // do the I2C
+      external_i2c( address, byte_buffer, true, buffer_size);
+      
+      // process the read-back and print the output
+      Serial_Print("\""); 
+      Serial_Print(i2c_name); 
+      Serial_Print("\":["); 
+      // next, re-read the buffer as integers using the proper word-size and byte order
+      int word_index = 0;
+      while( word_index  < buffer_size){
+        if(word_index > 0){
+          Serial_Print(",");
         }
-      }else{
-        // bytes are in reverse order
-        for( int j = wordsize - 1; j >= 0; j--){
-          value = (value << 8) | (byte_buffer[word_index + j] & 0xFF);
+        uint32_t value = 0;
+        if(bigendian){
+          // bytes are in network order
+          for( int j = 0; j < wordsize; j++){
+            value = (value << 8) | (byte_buffer[word_index + j] & 0xFF);
+          }
+        }else{
+          // bytes are in reverse order
+          for( int j = wordsize - 1; j >= 0; j--){
+            value = (value << 8) | (byte_buffer[word_index + j] & 0xFF);
+          }
         }
+        Serial_Print((const unsigned )value);
+        word_index += wordsize;
       }
-      Serial_Print((const unsigned )value);
-      word_index += wordsize;
+      Serial_Print("],");
     }
-    Serial_Print("],");
   }
 }
 

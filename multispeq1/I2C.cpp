@@ -4,17 +4,9 @@
 const uint8_t I2C_READ_BIT = 1;
 const uint8_t I2C_WRITE_BIT = 0; 
 
-void external_i2c(uint8_t address, uint8_t * data_buffer, uint8_t * rw_array, int buffer_size) {
-	// first, check if this is a read-only or mixed read-write
-	bool readonly = true;
-	for(int i = 0; i < buffer_size; i++){
-		if(rw_array[i] == I2C_WRITE){
-			readonly = false;
-			break;
-		}
-	}
+void external_i2c(uint8_t address, uint8_t * data_buffer, bool read_mode /* true = read, false = write*/, int buffer_size) {
 	uint8_t realAddress;
-	if(readonly){
+	if(read_mode){
 		realAddress = (address << 1) | I2C_READ;
 	} else {
 		realAddress = (address << 1) | I2C_WRITE;
@@ -26,13 +18,15 @@ void external_i2c(uint8_t address, uint8_t * data_buffer, uint8_t * rw_array, in
 	}
 	// let's get this gravy train moving'!
 	i2c_bus.i2c_start(realAddress);
-	for(int i = 0; i < buffer_size; i++){
-		if(rw_array[i] == I2C_WRITE){
-			i2c_bus.i2c_write(data_buffer[i]);
-		} else {
-			data_buffer[i] = i2c_bus.i2c_read(false);
-		}
-	}
+  if(read_mode){
+    for(int i = 0; i < buffer_size; i++){
+      data_buffer[i] = i2c_bus.i2c_read(false);
+    }
+  }else{
+    for(int i = 0; i < buffer_size; i++){
+      data_buffer[i] = i2c_bus.i2c_read(false);
+    }
+  }
 	// done
 	i2c_bus.i2c_stop();
 }

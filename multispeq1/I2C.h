@@ -12,22 +12,20 @@
 */
 
 /**
-This function sends and receives data on the USB-C I2C line. It is capable of 
-mixed read and write communications by specifying which bytes are read or write 
-with the rw_array variable. For each 1 in rw_array, the corresponding byte in the 
-data_array will be filled with the read byte frmo the I2C.
+This function sends and receives data on the USB-C I2C line. In read mode, the 
+corresponding bytes in the data_array will be filled with the read byte from 
+the I2C.
 
 uint8_t address: 7-bit address for the target I2C device (do not include the R/W 
 bit)
 
-uint8_t* data_array: byte array of data to send and receive bytes. Must be the 
-same size as rw_array.
+uint8_t* data_array: byte array of data to send and receive bytes.
 
-uint8_t* rw_array: byte array to indicate which bytes in the data_array are for 
-writing (0) or reading (1). Must be the same size as data_array.
+uint8_t* read_mode: indicates whether this is a read or writer operation 
+(true = read, false = write)
 
-int buffer_size: Size of both data_array and rw_array
+int buffer_size: Size of data_array
 */
-void external_i2c(uint8_t address, uint8_t * data_array, uint8_t * rw_array, int buffer_size);
+void external_i2c(uint8_t address, uint8_t * data_buffer, bool read_mode, int buffer_size);
 
 #endif
