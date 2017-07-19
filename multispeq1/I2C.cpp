@@ -13,9 +13,11 @@ void external_i2c(uint8_t address, uint8_t * data_buffer, bool read_mode /* true
 	}
 	// initialize I2C if it isn't ready
 	SlowSoftI2CMaster i2c_bus = SlowSoftI2CMaster(EXTERNAL_I2C_DATA, EXTERNAL_I2C_CLOCK, true);
-	if( digitalRead(EXTERNAL_I2C_CLOCK) == LOW || digitalRead(EXTERNAL_I2C_DATA) == LOW ){
-		i2c_bus.i2c_init();
-	}
+  i2c_bus.setHigh(EXTERNAL_I2C_CLOCK);
+  delayMicroseconds(DELAY);
+  i2c_bus.setHigh(EXTERNAL_I2C_DATA);
+  delayMicroseconds(DELAY * 2);
+  
 	// let's get this gravy train moving'!
 	i2c_bus.i2c_start(realAddress);
   if(read_mode){
@@ -24,7 +26,7 @@ void external_i2c(uint8_t address, uint8_t * data_buffer, bool read_mode /* true
     }
   }else{
     for(int i = 0; i < buffer_size; i++){
-      data_buffer[i] = i2c_bus.i2c_read(false);
+      i2c_bus.i2c_write(data_buffer[i]);
     }
   }
 	// done
