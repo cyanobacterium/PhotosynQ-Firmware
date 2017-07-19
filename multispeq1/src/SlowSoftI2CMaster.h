@@ -39,10 +39,10 @@ class SlowSoftI2CMaster {
   bool i2c_write(uint8_t value);
   uint8_t i2c_read(bool last);
   bool error;
-  
- private:
   void setHigh(uint8_t pin);
   void setLow(uint8_t pin);
+  
+ private:
   uint8_t _sda;
   uint8_t _scl;
   bool _pullup;
